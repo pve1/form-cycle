@@ -7,13 +7,23 @@
 (defvar pve-cycle-undo-previous-function nil)
 (defvar pve-cycle-function 'pve-cycle-default-cycle-function)
 
-(setf pve-cycle-debug t)
+(defvar pve-cycle-debug nil)
 
-(defmacro pve-cycle-debug (thing)
-  `(when pve-cycle-debug
-     (print ,thing)))
-
+(defmacro pve-cycle-debug (thing &optional tag)
+  (if tag
+      `(when pve-cycle-debug
+         (princ (format "%s: %s: %s\n" ',tag ',thing ,thing))) 
+    `(when pve-cycle-debug
+       (princ (format "%s: %s\n" ',thing ,thing)))))
+ 
 ;; Basic functionality: Inserting strings in a cycle.
+
+(defun pve-cycle-make-undo-function (length)
+  (lambda ()
+    (when pve-cycle-initial-position
+      (goto-char pve-cycle-initial-position))
+    (delete-forward-char length)
+    (setf pve-cycle-undo-previous-function nil)))
 
 (defun pve-cycle-default-cycle-function (form)
   (unless pve-cycle-undo-previous-function
@@ -21,6 +31,8 @@
           (lambda ()
             (when pve-cycle-initial-position
               (goto-char pve-cycle-initial-position))
+            (pve-cycle-debug form pve-cycle-undo-previous-function)
+            (pve-cycle-debug (length form) pve-cycle-undo-previous-function)
             (delete-forward-char (length form))
             (setf pve-cycle-undo-previous-function nil))))
   (insert form)
@@ -83,6 +95,9 @@
     (when (consp form)
       (setf options (rest form)
             form (car form)))
+    (when (getf options 'map-form)
+      (save-excursion
+        (setf form (funcall (getf options 'map-form) form))))
     ;; Build string
     (with-temp-buffer 
       (insert form)
@@ -95,8 +110,10 @@
         (delete-backward-char (length pve-cycle-point-marker))
         (setf place-point (1- (point))))
       (setf string (buffer-substring-no-properties 1 (buffer-end 1))))
+    (pve-cycle-debug string pve-cycle-with-name)
     (when (getf options 'map-string)
-      (setf string (funcall (getf options 'map-string) string)))
+      (save-excursion
+        (setf string (funcall (getf options 'map-string) string))))
     (pve-cycle-default-cycle-function string)
     (when place-point
       (goto-char pve-cycle-initial-position)
@@ -105,8 +122,20 @@
         (save-excursion
           (funcall (getf options 'after-place-point)))))
     (when (getf options 'after-cycle)
-      (save-excursion
-        (funcall (getf options 'after-cycle))))
+      (let ((end (save-excursion
+                   (let ((len (length string)))
+                     (goto-char (+ pve-cycle-initial-position len))
+                     (push-mark)
+                     (point)))))
+        (save-excursion 
+          (funcall (getf options 'after-cycle)))
+        (unless (= (mark) end)
+          (pve-cycle-debug (mark))
+          (pve-cycle-debug end)
+          (setf pve-cycle-undo-previous-function
+                (pve-cycle-make-undo-function 
+                 (- (mark) pve-cycle-initial-position))))
+        (pop-mark)))
     string))
 
 (defun pve-cycle-test-with-name ()
@@ -130,17 +159,34 @@
       "(%_ :initarg :_ :accessor _ :initform nil)"
       ("(%_ :initarg :_
     :accessor _
-    :initform nil)" after-cycle (lambda () 
-                                  (beginning-of-defun)
-                                  (indent-pp-sexp))))
+    :initform nil)" after-cycle pve-cycle-indent-defun)
+      ("(%_ :initarg :_
+    :accessor %%%-_
+    :initform nil)" 
+       map-form (lambda (string) 
+                  (beginning-of-defun)
+                  (search-forward "defclass ")
+                  (let* ((name (symbol-name (symbol-at-point)))
+                         (new (replace-regexp-in-string "%%%" name string)))
+                    (pve-cycle-debug new)
+                    new))
+       after-cycle pve-cycle-indent-defun))
 
     ((defpackage :export)
-     "#:_"
-     ("\"_\"" map-string upcase))
+     ("\"_\"" map-string upcase)
+     "#:_")
+
+    ((defpackage)
+     ("\"_\"" map-string upcase)
+     "#:_")
  
     ;; Always matches.
     (nil "(let ((_ @))\n    )"
          "(let* ((_ @))\n    )")))
+
+(defun pve-cycle-indent-defun ()
+  (beginning-of-defun)
+  (indent-pp-sexp))
 
 (defun pve-cycle-match-context-pattern (pattern context)
   (if (and (null pattern)
