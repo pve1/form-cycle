@@ -92,12 +92,19 @@
   (let ((place-point)
         (string)
         (options))
+
     (when (consp form)
       (setf options (rest form)
             form (car form)))
+
+    (when (or (functionp form)
+              (symbolp form))
+      (setf form (funcall form)))
+
     (when (getf options 'map-form)
       (save-excursion
         (setf form (funcall (getf options 'map-form) form))))
+
     ;; Build string
     (with-temp-buffer 
       (insert form)
@@ -150,8 +157,12 @@
   '((cycle-toplevel
      "(defun _ ()\n  @)"
      "(defmethod _ ()\n  @)"
+     "(defgeneric _ ())"
      "(defclass _ ()\n  (@))"
-     "(defgeneric _ ())")
+     "(defpackage #:_
+  (:use #:cl)
+  (:local-nicknames ())
+  (:export))\n\n(in-package #:_)")
 
     (defclass
       "%_"
@@ -164,17 +175,17 @@
     :accessor %%%-_
     :initform nil)" 
        map-form (lambda (string) 
-                  (beginning-of-defun)
-                  (search-forward "defclass ")
-                  (let* ((name (symbol-name (symbol-at-point)))
-                         (new (replace-regexp-in-string "%%%" name string)))
-                    (pve-cycle-debug new)
-                    new))
+                  (replace-regexp-in-string "%%%" 
+                                            (pve-cycle-toplevel-form-name)
+                                            string))
        after-cycle pve-cycle-indent-defun))
 
     ((defpackage :export)
      ("\"_\"" map-string upcase)
      "#:_")
+
+    ((defpackage :local-nicknames)
+     "(#:a #:alexandria)")
 
     ((defpackage)
      ("\"_\"" map-string upcase)
@@ -187,6 +198,13 @@
 (defun pve-cycle-indent-defun ()
   (beginning-of-defun)
   (indent-pp-sexp))
+
+(defun pve-cycle-toplevel-form-name ()
+  (save-excursion 
+    (beginning-of-defun)
+    (down-list)
+    (forward-sexp 2)
+    (symbol-name (symbol-at-point))))
 
 (defun pve-cycle-match-context-pattern (pattern context)
   (if (and (null pattern)
