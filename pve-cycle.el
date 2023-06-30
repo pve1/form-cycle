@@ -10,11 +10,11 @@
 (defvar pve-cycle-debug nil)
 
 (defmacro pve-cycle-debug (thing &optional tag)
-  (if tag
-      `(when pve-cycle-debug
-         (princ (format "%s: %s: %s\n" ',tag ',thing ,thing))) 
-    `(when pve-cycle-debug
-       (princ (format "%s: %s\n" ',thing ,thing)))))
+  (if pve-cycle-debug
+      (if tag
+          `(princ (format "%s: %s: %s\n" ',tag ',thing ,thing))
+        `(princ (format "%s: %s\n" ',thing ,thing)))
+    '()))
  
 ;; Basic functionality: Inserting strings in a cycle.
 
@@ -159,13 +159,14 @@
      "(defmethod _ ()\n  @)"
      "(defgeneric _ ())"
      "(defclass _ ()\n  (@))"
+     "(defvar _ @)"
+     "(defparameter _ @)"
      "(defpackage #:_
   (:use #:cl)
   (:local-nicknames ())
   (:export))\n\n(in-package #:_)")
 
     (defclass
-      "%_"
       "(%_ :initarg :_ :initform nil)"
       "(%_ :initarg :_ :accessor _ :initform nil)"
       ("(%_ :initarg :_
@@ -190,14 +191,51 @@
     ((defpackage)
      ("\"_\"" map-string upcase)
      "#:_")
+
+    ((defgeneric :method)
+     "(_ _)"
+     (pve-cycle-include-context nil))
+
+    (defgeneric
+      "(:method ()
+    )"
+      "(:documentation \"\")")
+
+    (defmethod
+      "(_ _)"
+      (pve-cycle-include-context nil))
+ 
+    (assert
+      "(null @_)"
+      "(not (null @_))")
+
+    (asdf:defsystem 
+     "(:file \"_\")"
+     "(:module \"_\"
+                        :components (@))")
  
     ;; Always matches.
-    (nil "(let ((_ @))\n    )"
-         "(let* ((_ @))\n    )")))
-
+    (nil "(check-type _ @)"
+         "(assert @_)"
+         ("(return-from %%% @_)"        
+          map-form (lambda (string) 
+                     (replace-regexp-in-string "%%%" 
+                                               (pve-cycle-toplevel-form-name)
+                                               string)))
+         "(let ((_ @))\n    )"
+         "(let* ((_ @))\n    )"
+         "(declare (ignore _))")))
+          
 (defun pve-cycle-indent-defun ()
   (beginning-of-defun)
   (indent-pp-sexp))
+
+(defun pve-cycle-toplevel-form-nth (n)
+  (save-excursion 
+    (beginning-of-defun)
+    (down-list)
+    (forward-sexp n)
+    (symbol-name (symbol-at-point))))
 
 (defun pve-cycle-toplevel-form-name ()
   (save-excursion 
@@ -257,7 +295,19 @@
                                     (t (car c)))                             
                     when (pve-cycle-match-context-pattern pat current-context)
                     return (rest c))))
-        matched-context))))
+        (pve-cycle-process-includes matched-context known-contexts)))))
+
+(defun pve-cycle-process-includes (context known-contexts)
+  (let (complete-context)
+    (loop for form in context
+          if (and (consp form)
+                  (eq (first form) 'pve-cycle-include-context))
+          do (loop for form2 in (rest (find (second form) known-contexts
+                                            :key #'first
+                                            :test #'equal))
+                   do (push form2 complete-context))
+          else do (push form complete-context))
+    (nreverse complete-context)))
         
 (defun pve-cycle-test-lisp-forms ()
   (interactive)
