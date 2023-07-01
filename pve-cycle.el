@@ -74,20 +74,27 @@
 (defvar pve-cycle-name-marker "_")
 (defvar pve-cycle-point-marker "@")
 
+(defun pve-cycle-symbol-at-point ()
+  (let ((sym (symbol-at-point)))
+    (when (and sym
+               (string-match "^\\_<" (symbol-name sym)))
+      sym)))
+
 ;; Point should be at the beginning of the form that was previously
 ;; inserted.
 (defun pve-cycle-with-name (form)
   ;; Initialize
   (when pve-cycle-new-cycle-p
     (let ((sym (symbol-at-point)))
-      (if sym
+      (if (and sym
+               (string-match "^\\_<" (symbol-name sym)))
           (progn
             (unless (looking-at "\\_<")
               (beginning-of-sexp))
             (kill-sexp)
             (setf pve-cycle-current-name (symbol-name sym)
                   pve-cycle-initial-position (point)))
-        (setf pve-cycle-current-name "")))) 
+        (setf pve-cycle-current-name ""))))
   
   (let ((place-point)
         (string)
@@ -155,12 +162,14 @@
 
 (defvar pve-cycle-lisp-forms
   '((cycle-toplevel
-     "(defun _ ()\n  @)"
-     "(defmethod _ ()\n  @)"
-     "(defgeneric _ ())"
+     "(defun _ (@)\n  )"
+     "(defmethod _ (@)\n  )"
+     "(defgeneric _ (@))"
      "(defclass _ ()\n  (@))"
      "(defvar _ @)"
      "(defparameter _ @)"
+     ("(defmethod initialize-instance :after ((%%% _) &key)\n  @)" 
+      map-form pve-cycle-%%%-to-first-char-of-current-name)
      "(defpackage #:_
   (:use #:cl)
   (:local-nicknames ())
@@ -193,7 +202,7 @@
      "#:_")
 
     ((defgeneric :method)
-     "(_ _)"
+     ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
      (pve-cycle-include-context nil))
 
     (defgeneric
@@ -202,7 +211,7 @@
       "(:documentation \"\")")
 
     (defmethod
-      "(_ _)"
+      ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
       (pve-cycle-include-context nil))
  
     (assert
@@ -215,34 +224,50 @@
                         :components (@))")
  
     ;; Always matches.
-    (nil "(check-type _ @)"
-         "(assert @_)"
-         ("(return-from %%% @_)"        
-          map-form (lambda (string) 
-                     (replace-regexp-in-string "%%%" 
-                                               (pve-cycle-toplevel-form-name)
-                                               string)))
+    (nil "(setf _ @)"
+         "(make-instance '_ @)"
          "(let ((_ @))\n    )"
          "(let* ((_ @))\n    )"
-         "(declare (ignore _))")))
-          
+         "(lambda (_) @)"
+         "(check-type _ @)"
+         "(assert @_)"
+         "(declare (ignore _))"
+         ("(return-from %%% @_)"        
+          map-form (lambda (string) 
+                     (let ((name (pve-cycle-toplevel-form-name)))
+                       (if name
+                           (replace-regexp-in-string "%%%" name string)
+                         string)))))))
+
+(defun pve-cycle-%%%-to-first-char-of-current-name (form)
+  (if (equal "" pve-cycle-current-name)
+      form
+    (let ((first-char (aref pve-cycle-current-name 0)))
+      (replace-regexp-in-string "%%%" 
+                                (char-to-string first-char)
+                                form))))  
+        
 (defun pve-cycle-indent-defun ()
   (beginning-of-defun)
   (indent-pp-sexp))
 
 (defun pve-cycle-toplevel-form-nth (n)
-  (save-excursion 
-    (beginning-of-defun)
-    (down-list)
-    (forward-sexp n)
-    (symbol-name (symbol-at-point))))
+  (condition-case nil
+    (save-excursion 
+      (beginning-of-defun)
+      (down-list)
+      (forward-sexp n)
+      (symbol-name (symbol-at-point)))
+    (error nil)))
 
 (defun pve-cycle-toplevel-form-name ()
-  (save-excursion 
-    (beginning-of-defun)
-    (down-list)
-    (forward-sexp 2)
-    (symbol-name (symbol-at-point))))
+  (condition-case nil
+    (save-excursion 
+      (beginning-of-defun)
+      (down-list)
+      (forward-sexp 2)
+      (symbol-name (symbol-at-point)))
+    (error nil)))
 
 (defun pve-cycle-match-context-pattern (pattern context)
   (if (and (null pattern)
@@ -275,10 +300,11 @@
 
 (defun pve-cycle-gather-context ()
   (save-excursion
-    (nreverse (loop until (pve-cycle-at-toplevel-p)
-                    for car = (pve-surrounding-sexp-car)
-                    collect car
-                    do (up-list -1)))))
+    (nreverse
+     (loop until (pve-cycle-at-toplevel-p)
+           for car = (pve-surrounding-sexp-car)
+           collect car
+           do (up-list -1)))))
 
 (defun pve-cycle-determine-context (known-contexts)
   (save-excursion
@@ -302,18 +328,20 @@
     (loop for form in context
           if (and (consp form)
                   (eq (first form) 'pve-cycle-include-context))
-          do (loop for form2 in (rest (find (second form) known-contexts
+          do (loop for form2 in (rest (find (second form) 
+                                            known-contexts
                                             :key #'first
                                             :test #'equal))
                    do (push form2 complete-context))
           else do (push form complete-context))
     (nreverse complete-context)))
         
-(defun pve-cycle-test-lisp-forms ()
+(defun pve-cycle-test-lisp-forms (&optional lisp-forms)
   (interactive)
+  (when (null lisp-forms)
+    (setf lisp-forms pve-cycle-lisp-forms))
   (let ((pve-cycle-function 'pve-cycle-with-name)
-        (context (pve-cycle-determine-context
-                  pve-cycle-lisp-forms)))
+        (context (pve-cycle-determine-context lisp-forms)))
     (pve-cycle-debug context)
     (pve-cycle-initiate context)))
 
