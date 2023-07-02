@@ -174,14 +174,18 @@
 
 ;; Context aware lisp forms
 
-(defun pve-cycle-%%%-to-first-char-of-current-name (form)
-  (if (equal "" pve-cycle-current-name)
+(defun pve-cycle-%%%-to-subseq-of-current-name (form length)
+  (if (< (length pve-cycle-current-name) length)
       form
-    (let ((first-char (aref pve-cycle-current-name 0)))
-      (replace-regexp-in-string "%%%" 
-                                (char-to-string first-char)
-                                form))))  
-        
+    (let ((prefix (subseq pve-cycle-current-name 0 length)))
+      (replace-regexp-in-string "%%%" prefix form))))
+
+(defun pve-cycle-%%%-to-first-char-of-current-name (form)
+  (pve-cycle-%%%-to-subseq-of-current-name form 1)) 
+
+(defun pve-cycle-%%%-to-first-two-chars-of-current-name (form)
+  (pve-cycle-%%%-to-subseq-of-current-name form 2))
+
 (defun pve-cycle-indent-defun ()
   (beginning-of-defun)
   (indent-pp-sexp))
@@ -317,8 +321,7 @@
      "(defpackage #:_
   (:use #:cl)
   (:local-nicknames ())
-  (:export))\n\n(in-package #:_)"
-     "(cycle-defpackage _@)")
+  (:export))\n\n(in-package #:_)")
 
     (defclass
       "(%_ :initarg :_ :initform nil)"
@@ -337,12 +340,12 @@
 
     ((defpackage :local-nicknames)
      ("(#:%%% #:_)" map-form pve-cycle-%%%-to-first-char-of-current-name)
-     "(#:a #:alexandria)"
+     ("(#:%%% #:_)" map-form pve-cycle-%%%-to-first-two-chars-of-current-name)
+     ("(#:%%% #:_)" map-form (lambda (form)
+                               (pve-cycle-%%%-to-subseq-of-current-name form 3)))
+     ("(#:%%% #:_)" map-form (lambda (form)
+                               (pve-cycle-%%%-to-subseq-of-current-name form 4)))
      (pve-cycle-include-context (defpackage)))
-
-    (((cycle-defpackage) up-list)
-     "(defpackage #:_
-  ; (option@))\n\n(in-package #:_)")
 
     (((defpackage option) up-list)
      ("(:use @)
