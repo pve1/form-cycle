@@ -365,16 +365,18 @@
      "#:_"
      "(option)")
     
-    (((loop impossible-to-remember-loop-construct) up-list)
+    (((loop for-as-hash) up-list)
      (":for %%% :being :each :hash-key :using (:hash-value val) :in _"
       map-form pve-cycle-%%%-to-first-char-of-current-name)
      (":for %%% :being :each :hash-value :using (:hash-key key) :in _"
-      map-form pve-cycle-%%%-to-first-char-of-current-name)
+      map-form pve-cycle-%%%-to-first-char-of-current-name))
+
+    (((loop for-as-package) up-list)
      (":for %%% :being :each :symbol :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
      (":for %%% :being :each :present-symbol :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
      (":for %%% :being :each :external-symbol :in _" map-form pve-cycle-%%%-to-first-char-of-current-name))
 
-    (((loop easy-to-remember-loop-construct) up-list)
+    (((loop simple-loop-clauses) up-list)
      (":for %%% :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
      (":for _ :from 0 :to ")
      (":for _ :from 0 :below ")
@@ -382,7 +384,12 @@
      (":for %%% = _ :then " map-form pve-cycle-%%%-to-first-char-of-current-name)
      (":for %%% :across _" map-form pve-cycle-%%%-to-first-char-of-current-name))
 
-    (loop "(impossible-to-remember-loop-construct)"
+    (((loop loop-clause) up-list)
+     "(simple-loop-clauses _)"
+     "(for-as-hash _)"
+     "(for-as-package _)")
+
+    (loop "(loop-clause _)"
           (pve-cycle-include-context nil))
 
     ((defgeneric :method)
