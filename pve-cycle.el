@@ -91,14 +91,6 @@
 (defun pve-cycle-with-name (form)
   ;; Initialize
   (when pve-cycle-new-cycle-p
-    (when pve-cycle-up-list-initially-p
-      (up-list -1)
-      (kill-sexp)
-      (setf pve-cycle-initial-position (point)))
-    (when pve-cycle-raise-list-initially-p
-      (pve-cycle-beginning-of-symbol-maybe)
-      (raise-sexp)
-      (setf pve-cycle-initial-position (point)))
     (let ((sym (symbol-at-point)))
       (if (and sym
                (string-match "^\\_<" (symbol-name sym)))
@@ -108,7 +100,15 @@
             (kill-sexp)
             (setf pve-cycle-current-name (symbol-name sym)
                   pve-cycle-initial-position (point)))
-        (setf pve-cycle-current-name ""))))
+        (setf pve-cycle-current-name "")))
+    (when pve-cycle-up-list-initially-p
+      (up-list -1)
+      (kill-sexp)
+      (setf pve-cycle-initial-position (point)))
+    (when pve-cycle-raise-list-initially-p
+      (pve-cycle-beginning-of-symbol-maybe)
+      (raise-sexp)
+      (setf pve-cycle-initial-position (point))))
   
   (let ((place-point)
         (string)
@@ -338,6 +338,9 @@
      ("(#:%%% #:_)" map-form pve-cycle-%%%-to-first-char-of-current-name)
      "(#:a #:alexandria)"
      (pve-cycle-include-context nil))
+
+    (((defpackage-pseudo) up-list)
+     "(defpackage #:_)")
 
     (((defpackage option) up-list)
      ("(:use @)
