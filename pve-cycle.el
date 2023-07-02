@@ -56,7 +56,7 @@
 
 (defun pve-cycle-initiate (cycle)
   (if (pve-cycle-new-cycle-p)
-      (let ((pve-cycle-new-cycle-p t))            
+      (let ((pve-cycle-new-cycle-p t)) 
         (pve-cycle-debug "New Cycle.")
         (setq pve-cycle-current-cycle-state cycle
               pve-cycle-undo-previous-function nil
@@ -73,6 +73,8 @@
 (defvar pve-cycle-current-name nil)
 (defvar pve-cycle-name-marker "_")
 (defvar pve-cycle-point-marker "@")
+(defvar pve-cycle-up-list-initially-p nil)
+(defvar pve-cycle-raise-list-initially-p nil)
 
 (defun pve-cycle-symbol-at-point ()
   (let ((sym (symbol-at-point)))
@@ -80,11 +82,23 @@
                (string-match "^\\_<" (symbol-name sym)))
       sym)))
 
+(defun pve-cycle-beginning-of-symbol-maybe ()
+  (when (pve-cycle-symbol-at-point)
+    (beginning-of-sexp)))
+
 ;; Point should be at the beginning of the form that was previously
 ;; inserted.
 (defun pve-cycle-with-name (form)
   ;; Initialize
   (when pve-cycle-new-cycle-p
+    (when pve-cycle-up-list-initially-p
+      (up-list -1)
+      (kill-sexp)
+      (setf pve-cycle-initial-position (point)))
+    (when pve-cycle-raise-list-initially-p
+      (pve-cycle-beginning-of-symbol-maybe)
+      (raise-sexp)
+      (setf pve-cycle-initial-position (point)))
     (let ((sym (symbol-at-point)))
       (if (and sym
                (string-match "^\\_<" (symbol-name sym)))
@@ -160,85 +174,6 @@
 
 ;; Context aware lisp forms
 
-(defvar pve-cycle-lisp-forms
-  '((cycle-toplevel
-     "(defun _ (@)\n  )"
-     "(defmethod _ (@)\n  )"
-     "(defgeneric _ (@))"
-     "(defclass _ ()\n  (@))"
-     "(defvar _ @)"
-     "(defparameter _ @)"
-     ("(defmethod initialize-instance :after ((%%% _) &key)\n  @)" 
-      map-form pve-cycle-%%%-to-first-char-of-current-name)
-     "(defpackage #:_
-  (:use #:cl)
-  (:local-nicknames ())
-  (:export))\n\n(in-package #:_)")
-
-    (defclass
-      "(%_ :initarg :_ :initform nil)"
-      "(%_ :initarg :_ :accessor _ :initform nil)"
-      ("(%_ :initarg :_
-    :accessor _
-    :initform nil)" after-cycle pve-cycle-indent-defun)
-      ("(%_ :initarg :_
-    :accessor %%%-_
-    :initform nil)" 
-       map-form (lambda (string) 
-                  (replace-regexp-in-string "%%%" 
-                                            (pve-cycle-toplevel-form-name)
-                                            string))
-       after-cycle pve-cycle-indent-defun))
-
-    ((defpackage :export)
-     ("\"_\"" map-string upcase)
-     "#:_")
-
-    ((defpackage :local-nicknames)
-     "(#:a #:alexandria)")
-
-    ((defpackage)
-     ("\"_\"" map-string upcase)
-     "#:_")
-
-    ((defgeneric :method)
-     ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
-     (pve-cycle-include-context nil))
-
-    (defgeneric
-      "(:method ()
-    )"
-      "(:documentation \"\")")
-
-    (defmethod
-      ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
-      (pve-cycle-include-context nil))
- 
-    (assert
-      "(null @_)"
-      "(not (null @_))")
-
-    (asdf:defsystem 
-     "(:file \"_\")"
-     "(:module \"_\"
-                        :components (@))")
- 
-    ;; Always matches.
-    (nil "(setf _ @)"
-         "(make-instance '_ @)"
-         "(let ((_ @))\n    )"
-         "(let* ((_ @))\n    )"
-         "(lambda (_) @)"
-         "(check-type _ @)"
-         "(assert @_)"
-         "(declare (ignore _))"
-         ("(return-from %%% @_)"        
-          map-form (lambda (string) 
-                     (let ((name (pve-cycle-toplevel-form-name)))
-                       (if name
-                           (replace-regexp-in-string "%%%" name string)
-                         string)))))))
-
 (defun pve-cycle-%%%-to-first-char-of-current-name (form)
   (if (equal "" pve-cycle-current-name)
       form
@@ -312,25 +247,43 @@
       (let* ((top-level t)
              (current-context (or (pve-cycle-gather-context)
                                   '(cycle-toplevel)))
+             (options)
              (matched-context
               (loop for c in known-contexts
+                    for opts = nil
                     for pat = (cond ((null (car c))
                                      nil)
                                     ((symbolp (car c))
                                      (list (car c)))
-                                    (t (car c)))                             
+                                        ; Have options
+                                    ((and (listp (car c))
+                                          (listp (caar c)))
+                                     (setf opts (rest (car c)))
+                                     (caar c)) 
+                                    (t (car c))) 
                     when (pve-cycle-match-context-pattern pat current-context)
-                    return (rest c))))
-        (pve-cycle-process-includes matched-context known-contexts)))))
+                    return (progn (setf options opts)
+                                  (rest c)))))
+        ;; Matched-context is the list of forms, i.e. the second
+        ;; element of the context.
+        (list 'forms (pve-cycle-process-includes matched-context known-contexts)
+              'options options)))))
+
+(defun pve-cycle-pattern-key (context)
+  (if (and (listp (car context))
+           (listp (caar context)))
+      (caar context)
+    (car context)))
 
 (defun pve-cycle-process-includes (context known-contexts)
+  ;; Context is the one chosen by pve-cycle-determine-context.
   (let (complete-context)
     (loop for form in context
-          if (and (consp form)
+          if (and (consp form) ; (pve-cycle-include-context foo)
                   (eq (first form) 'pve-cycle-include-context))
-          do (loop for form2 in (rest (find (second form) 
+          do (loop for form2 in (rest (find (second form) ; foo 
                                             known-contexts
-                                            :key #'first
+                                            :key #'pve-cycle-pattern-key
                                             :test #'equal))
                    do (push form2 complete-context))
           else do (push form complete-context))
@@ -341,8 +294,105 @@
   (when (null lisp-forms)
     (setf lisp-forms pve-cycle-lisp-forms))
   (let ((pve-cycle-function 'pve-cycle-with-name)
-        (context (pve-cycle-determine-context lisp-forms)))
+        (context (pve-cycle-determine-context lisp-forms))
+        (pve-cycle-up-list-initially-p)
+        (pve-cycle-raise-list-initially-p))
+    (loop for opt in (getf context 'options)
+          do
+          (case opt
+            (up-list (setf pve-cycle-up-list-initially-p t))))
     (pve-cycle-debug context)
-    (pve-cycle-initiate context)))
+    (pve-cycle-initiate (getf context 'forms))))
 
+(defvar pve-cycle-lisp-forms
+  '((cycle-toplevel
+     "(defun _ (@)\n  )"
+     "(defmethod _ (@)\n  )"
+     "(defgeneric _ (@))"
+     "(defclass _ ()\n  (@))"
+     "(defvar _ @)"
+     "(defparameter _ @)"
+     ("(defmethod initialize-instance :after ((%%% _) &key)\n  @)" 
+      map-form pve-cycle-%%%-to-first-char-of-current-name)
+     "(defpackage #:_
+  (:use #:cl)
+  (:local-nicknames ())
+  (:export))\n\n(in-package #:_)")
 
+    (defclass
+      "(%_ :initarg :_ :initform nil)"
+      "(%_ :initarg :_ :accessor _ :initform nil)"
+      ("(%_ :initarg :_
+    :accessor _
+    :initform nil)" after-cycle pve-cycle-indent-defun)
+      ("(%_ :initarg :_
+    :accessor %%%-_
+    :initform nil)" 
+       map-form (lambda (string) 
+                  (replace-regexp-in-string "%%%" 
+                                            (pve-cycle-toplevel-form-name)
+                                            string))
+       after-cycle pve-cycle-indent-defun))
+
+    ((defpackage :local-nicknames)
+     ("(#:%%% #:_)" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     "(#:a #:alexandria)"
+     (pve-cycle-include-context nil))
+
+    (((defpackage option) up-list)
+     ("(:use @)
+  (option)")
+     ("(:local-nicknames (@))
+  (option)")
+     ("(:export @)
+  (option)")
+     ("(:shadow @)
+  (option)")
+     ("(:shadowing-import-from @)
+  (option)")
+     ("(:import-from @)
+  (option)")
+     ("(:documentation @)
+  (option)"))
+
+    ((defpackage)
+     ("\"_\"" map-string upcase)
+     "#:_")
+
+    ((defgeneric :method)
+     ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (pve-cycle-include-context nil))
+
+    (defgeneric
+      "(:method ()
+    )"
+      "(:documentation \"\")")
+
+    (defmethod
+      ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
+      (pve-cycle-include-context nil))
+ 
+    (assert
+      "(null @_)"
+      "(not (null @_))")
+
+    (asdf:defsystem 
+     "(:file \"_\")"
+     "(:module \"_\"
+                        :components (@))")
+ 
+    ;; Always matches.
+    (nil "(setf _ @)"
+         "(make-instance '_ @)"
+         "(let ((_ @))\n    )"
+         "(let* ((_ @))\n    )"
+         "(lambda (_) @)"
+         "(check-type _ @)"
+         "(assert @_)"
+         "(declare (ignore _))"
+         ("(return-from %%% @_)"        
+          map-form (lambda (string) 
+                     (let ((name (pve-cycle-toplevel-form-name)))
+                       (if name
+                           (replace-regexp-in-string "%%%" name string)
+                         string)))))))
