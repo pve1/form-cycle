@@ -338,7 +338,7 @@
     ((defpackage :local-nicknames)
      ("(#:%%% #:_)" map-form pve-cycle-%%%-to-first-char-of-current-name)
      "(#:a #:alexandria)"
-     (pve-cycle-include-context nil))
+     (pve-cycle-include-context (defpackage)))
 
     (((cycle-defpackage) up-list)
      "(defpackage #:_
@@ -359,6 +359,11 @@
   (option)")
      ("(:documentation \"@\")
   (option)"))
+
+    ((defpackage)
+     ("\"_\"" map-string upcase)
+     "#:_"
+     "(option)")
     
     (((loop impossible-to-remember-loop-construct) up-list)
      (":for %%% :being :each :hash-key :using (:hash-value val) :in _"
@@ -379,11 +384,6 @@
 
     (loop "(impossible-to-remember-loop-construct)"
           (pve-cycle-include-context nil))
-
-    ((defpackage)
-     ("\"_\"" map-string upcase)
-     "#:_"
-     "(option)")
 
     ((defgeneric :method)
      ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
