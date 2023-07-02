@@ -317,7 +317,8 @@
      "(defpackage #:_
   (:use #:cl)
   (:local-nicknames ())
-  (:export))\n\n(in-package #:_)")
+  (:export))\n\n(in-package #:_)"
+     "(cycle-defpackage _@)")
 
     (defclass
       "(%_ :initarg :_ :initform nil)"
@@ -339,8 +340,9 @@
      "(#:a #:alexandria)"
      (pve-cycle-include-context nil))
 
-    (((defpackage-pseudo) up-list)
-     "(defpackage #:_)")
+    (((cycle-defpackage) up-list)
+     "(defpackage #:_
+  ; (option@))\n\n(in-package #:_)")
 
     (((defpackage option) up-list)
      ("(:use @)
@@ -355,12 +357,33 @@
   (option)")
      ("(:import-from @)
   (option)")
-     ("(:documentation @)
+     ("(:documentation \"@\")
   (option)"))
+    
+    (((loop impossible-to-remember-loop-construct) up-list)
+     (":for %%% :being :each :hash-key :using (:hash-value val) :in _"
+      map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for %%% :being :each :hash-value :using (:hash-key key) :in _"
+      map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for %%% :being :each :symbol :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for %%% :being :each :present-symbol :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for %%% :being :each :external-symbol :in _" map-form pve-cycle-%%%-to-first-char-of-current-name))
+
+    (((loop easy-to-remember-loop-construct) up-list)
+     (":for %%% :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for _ :from 0 :to ")
+     (":for _ :from 0 :below ")
+     (":for %%% = _" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for %%% = _ :then " map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for %%% :across _" map-form pve-cycle-%%%-to-first-char-of-current-name))
+
+    (loop "(impossible-to-remember-loop-construct)"
+          (pve-cycle-include-context nil))
 
     ((defpackage)
      ("\"_\"" map-string upcase)
-     "#:_")
+     "#:_"
+     "(option)")
 
     ((defgeneric :method)
      ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
