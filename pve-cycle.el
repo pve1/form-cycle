@@ -157,6 +157,11 @@
       (when (getf options 'after-place-point)
         (save-excursion
           (funcall (getf options 'after-place-point)))))
+    (when (getf options 'place-point)
+      (let ((p (getf options 'place-point)))
+        (typecase p
+          (integer (goto-char (+ pve-cycle-initial-position p)))
+          (function (funcall p)))))
     (when (getf options 'after-cycle)
       (let ((end (save-excursion
                    (let ((len (length string)))
@@ -326,6 +331,12 @@
                  pve-cycle-lisp-forms
                  :test #'equal
                  :key #'pve-cycle-pattern-key)
+        t)
+    nil))
+
+(defun pve-cycle-add-interactively (pattern forms &optional options)
+  (if (pve-cycle-add pattern forms options)
+      (progn
         (message "Ok.")
         t)
     (progn 
@@ -337,6 +348,9 @@
         :key #'pve-cycle-pattern-key
         :test #'equal))
 
+(defun pve-cycle-find-interactively (pattern)
+  (message "%s" (pve-cycle-find pattern)))
+
 (defun pve-cycle-delete (pattern)
   (if (pve-cycle-find pattern)
       (progn
@@ -344,17 +358,23 @@
               (cl-delete pattern pve-cycle-lisp-forms
                          :key #'pve-cycle-pattern-key
                          :test #'equal))
-        (message "Deleted.")
         t)
-    (progn 
-      (message "Error")
-      nil)))
+    nil))
 
-(defun pve-cycle-replace (pattern forms &optional options)
-  (if (pve-cycle-delete pattern)
-      (pve-cycle-add pattern forms options)
+(defun pve-cycle-delete-interactively (pattern)
+  (if (pve-cycle-delete)
+      (progn (message "Deleted.")
+             t)
     (progn (message "Error")
            nil)))
+
+(defun pve-cycle-replace (pattern forms &optional options)
+  (pve-cycle-delete pattern)
+  (pve-cycle-add pattern forms options))
+
+(defun pve-cycle-replace-interactively (pattern forms &optional options)
+  (pve-cycle-delete-interactively pattern)
+  (pve-cycle-add-interactively pattern forms options))
 
 (defvar pve-cycle-lisp-forms
   '((progn (pve-cycle-include-context nil))
@@ -494,77 +514,29 @@
                                (pattern (getf command 'pattern))
                                (forms (getf command 'forms))
                                (options (getf command 'options)))
-                          (print pve-cycle-up-list-initially-sexp-string)
-                          (print form)                          
-                          (if (listp pattern)
-                              (progn
-                                (pushnew (list* (list* pattern options)
-                                                forms)
-                                         pve-cycle-lisp-forms
-                                         :test #'equal
-                                         :key #'pve-cycle-pattern-key)
-                                (message "Ok.")
-                                pve-cycle-up-list-initially-sexp-string)
-                            (progn 
-                              (message "Error")
-                              pve-cycle-up-list-initially-sexp-string))))))
+                          (pve-cycle-add pattern forms options)
+                          pve-cycle-up-list-initially-sexp-string))
+      place-point 1))
 
     (((pve-cycle-replace) up-list)
      ("ok" map-string (lambda (s)
-                        (let ((form (car (read-from-string pve-cycle-up-list-initially-sexp-string))))
-                          ()
-
-                          (if (and (listp (second form))
-                                   (<= 1 (length (second form))))
-                              (progn
-                                (pushnew (second form) pve-cycle-lisp-forms
-                                         :test #'equal
-                                         :key #'pve-cycle-pattern-key)
-                                (message "Ok.")
-                                pve-cycle-up-list-initially-sexp-string)
-                            (progn 
-                              (message "Error")
-                              pve-cycle-up-list-initially-sexp-string))))))
+                        (let* ((form (car (read-from-string
+                                           pve-cycle-up-list-initially-sexp-string)))
+                               (command (rest form))
+                               (pattern (getf command 'pattern))
+                               (forms (getf command 'forms))
+                               (options (getf command 'options)))
+                          (pve-cycle-replace pattern forms options)
+                          pve-cycle-up-list-initially-sexp-string))
+      place-point 1))
     
-    (((pve-cycle-add) up-list)
-     ("ok" map-string (lambda (s)
-                        (let ((form (car (read-from-string
-                                          pve-cycle-up-list-initially-sexp-string))))
-                          (print pve-cycle-up-list-initially-sexp-string)
-                          (print form)
-                          
-                          (if (and (listp (second form))
-                                   (<= 1 (length (second form))))
-                              (progn
-                                (pushnew (second form) pve-cycle-lisp-forms
-                                         :test #'equal
-                                         :key #'pve-cycle-pattern-key)
-                                (message "Ok.")
-                                pve-cycle-up-list-initially-sexp-string)
-                            (progn 
-                              (message "Error")
-                              pve-cycle-up-list-initially-sexp-string))))))
-
     (((pve-cycle-delete) up-list)
      ("ok" map-string (lambda (s)
                         (let ((form (car (read-from-string
                                           pve-cycle-up-list-initially-sexp-string))))
-                          (print pve-cycle-up-list-initially-sexp-string)
-                          (print form)
-                          (if (and (<= 2 (length form))
-                                   (find (second form) pve-cycle-lisp-forms
-                                         :key #'pve-cycle-pattern-key
-                                         :test #'equal))
-                              (progn
-                                (setf pve-cycle-lisp-forms
-                                      (cl-delete (second form) pve-cycle-lisp-forms
-                                                 :key #'pve-cycle-pattern-key
-                                                 :test #'equal))
-                                (message "Deleted.")
-                                pve-cycle-up-list-initially-sexp-string) 
-                            (progn 
-                              (message "Error")
-                              pve-cycle-up-list-initially-sexp-string))))))
+                          (pve-cycle-delete (second form))
+                          pve-cycle-up-list-initially-sexp-string))
+      place-point 1))
 
     (((pve-cycle-find) up-list)
      ("ok" map-string (lambda (s)
@@ -574,10 +546,9 @@
                           (print form)
                           (message "%s"
                                    (prin1-to-string
-                                    (find (second form) pve-cycle-lisp-forms
-                                          :key #'pve-cycle-pattern-key
-                                          :test #'equal)))
-                          pve-cycle-up-list-initially-sexp-string))))
+                                    (pve-cycle-find (second form))))
+                          pve-cycle-up-list-initially-sexp-string))
+      place-point 1))
 
     ;; Always matches.
     (nil "(setf _ @)"
