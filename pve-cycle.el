@@ -362,7 +362,7 @@
     nil))
 
 (defun pve-cycle-delete-interactively (pattern)
-  (if (pve-cycle-delete)
+  (if (pve-cycle-delete pattern)
       (progn (message "Deleted.")
              t)
     (progn (message "Error")
@@ -514,7 +514,7 @@
                                (pattern (getf command 'pattern))
                                (forms (getf command 'forms))
                                (options (getf command 'options)))
-                          (pve-cycle-add pattern forms options)
+                          (pve-cycle-add-interactively pattern forms options)
                           pve-cycle-up-list-initially-sexp-string))
       place-point 1))
 
@@ -526,7 +526,7 @@
                                (pattern (getf command 'pattern))
                                (forms (getf command 'forms))
                                (options (getf command 'options)))
-                          (pve-cycle-replace pattern forms options)
+                          (pve-cycle-replace-interactively pattern forms options)
                           pve-cycle-up-list-initially-sexp-string))
       place-point 1))
     
@@ -534,7 +534,7 @@
      ("ok" map-string (lambda (s)
                         (let ((form (car (read-from-string
                                           pve-cycle-up-list-initially-sexp-string))))
-                          (pve-cycle-delete (second form))
+                          (pve-cycle-delete-interactively (second form))
                           pve-cycle-up-list-initially-sexp-string))
       place-point 1))
 
@@ -544,11 +544,9 @@
                                           pve-cycle-up-list-initially-sexp-string))))
                           (print pve-cycle-up-list-initially-sexp-string)
                           (print form)
-                          (message "%s"
-                                   (prin1-to-string
-                                    (pve-cycle-find (second form))))
+                          (pve-cycle-find-interactively (second form)))
                           pve-cycle-up-list-initially-sexp-string))
-      place-point 1))
+      place-point 1)
 
     ;; Always matches.
     (nil "(setf _ @)"
