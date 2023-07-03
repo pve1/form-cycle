@@ -278,7 +278,8 @@
                                   (rest c)))))
         ;; Matched-context is the list of forms, i.e. the second
         ;; element of the context.
-        (list 'forms (pve-cycle-process-includes matched-context known-contexts)
+        (list 'forms (pve-cycle-process-includes matched-context
+                                                 known-contexts)
               'options options)))))
 
 (defun pve-cycle-pattern-key (context)
@@ -317,8 +318,99 @@
     (pve-cycle-debug context)
     (pve-cycle-initiate (getf context 'forms))))
 
+(defun pve-cycle-add (pattern forms &optional options)
+  (if (listp pattern)
+      (progn
+        (pushnew (list* (list* pattern options)
+                        forms)
+                 pve-cycle-lisp-forms
+                 :test #'equal
+                 :key #'pve-cycle-pattern-key)
+        (message "Ok.")
+        t)
+    (progn 
+      (message "Error")
+      nil)))
+
+(defun pve-cycle-find (pattern)
+  (find pattern pve-cycle-lisp-forms
+        :key #'pve-cycle-pattern-key
+        :test #'equal))
+
+(defun pve-cycle-delete (pattern)
+  (if (pve-cycle-find pattern)
+      (progn
+        (setf pve-cycle-lisp-forms
+              (cl-delete pattern pve-cycle-lisp-forms
+                         :key #'pve-cycle-pattern-key
+                         :test #'equal))
+        (message "Deleted.")
+        t)
+    (progn 
+      (message "Error")
+      nil)))
+
+(defun pve-cycle-replace (pattern forms &optional options)
+  (if (pve-cycle-delete pattern)
+      (pve-cycle-add pattern forms options)
+    (progn (message "Error")
+           nil)))
+
 (defvar pve-cycle-lisp-forms
-  '((cycle-toplevel
+  '((progn (pve-cycle-include-context nil))
+
+    (format 
+     "\"~S~%\""
+     "\"~A~%\""
+     "\"~{~A~^, ~}~%\""
+     "\"~{~S~^, ~}~%\"")
+ 
+    (assert
+     "(null @_)"
+     "(not (null @_))")
+
+    (((loop for-as-hash) up-list)
+     (":for _ :being :each :hash-key :using (:hash-value val) :in @")
+     (":for _ :being :each :hash-value :using (:hash-key key) :in @")
+     (":for %%% :being :each :hash-key :using (:hash-value val) :in _"
+      map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for %%% :being :each :hash-value :using (:hash-key key) :in _"
+      map-form pve-cycle-%%%-to-first-char-of-current-name))
+
+    (((loop for-as-package) up-list)
+     (":for sym :being :each :symbol :in @" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for sym :being :each :present-symbol :in @" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for sym :being :each :external-symbol :in @" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for sym :being :each :symbol :in (find-package \"_\")"
+      map-form (lambda (form) 
+                 (setf pve-cycle-current-name (upcase pve-cycle-current-name))
+                 form))
+     (":for sym :being :each :present-symbol :in (find-package \"_\")"
+      map-form (lambda (form) 
+                 (setf pve-cycle-current-name (upcase pve-cycle-current-name))
+                 form))
+     (":for sym :being :each :external-symbol :in (find-package \"_\")"
+      map-form (lambda (form) 
+                 (setf pve-cycle-current-name (upcase pve-cycle-current-name))
+                 form)))
+
+    (((loop simple-loop-clauses) up-list)
+     (":for %%% :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for _ :from 0 :to ")
+     (":for _ :from 0 :below ")
+     (":for %%% = _" map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for %%% = _ :then " map-form pve-cycle-%%%-to-first-char-of-current-name)
+     (":for %%% :across _" map-form pve-cycle-%%%-to-first-char-of-current-name))
+
+    (((loop loop-clause) up-list)
+     "(simple-loop-clauses @)"
+     "(for-as-hash @)"
+     "(for-as-package @)")
+
+    (loop "(loop-clause@)"
+          (pve-cycle-include-context nil))
+
+    (cycle-toplevel
      "(defun _ (@)\n  )"
      "(defmethod _ (@)\n  )"
      "(defgeneric _ (@))"
@@ -329,7 +421,7 @@
       map-form pve-cycle-%%%-to-first-char-of-current-name)
      "(defpackage #:_
   (:use #:cl)
-  (:local-nicknames ())
+  (:local-nicknames)
   (:export))\n\n(in-package #:_)")
 
     (defclass
@@ -348,16 +440,17 @@
        after-cycle pve-cycle-indent-defun))
 
     ((defpackage :local-nicknames)
+     ("\"_\"" map-string upcase)
+     "#:_"
      ("(#:%%% #:_)" map-form pve-cycle-%%%-to-first-char-of-current-name)
      ("(#:%%% #:_)" map-form pve-cycle-%%%-to-first-two-chars-of-current-name)
      ("(#:%%% #:_)" map-form (lambda (form)
-                               (pve-cycle-%%%-to-subseq-of-current-name form 3)))
-     (pve-cycle-include-context (defpackage)))
+                               (pve-cycle-%%%-to-subseq-of-current-name form 3))))
 
     (((defpackage option) up-list)
      ("(:use @)
   (option)")
-     ("(:local-nicknames (@))
+     ("(:local-nicknames @)
   (option)")
      ("(:export @)
   (option)")
@@ -375,49 +468,18 @@
      "#:_"
      "(option)")
     
-    (((loop for-as-hash) up-list)
-     (":for %%% :being :each :hash-key :using (:hash-value val) :in _"
-      map-form pve-cycle-%%%-to-first-char-of-current-name)
-     (":for %%% :being :each :hash-value :using (:hash-key key) :in _"
-      map-form pve-cycle-%%%-to-first-char-of-current-name))
-
-    (((loop for-as-package) up-list)
-     (":for %%% :being :each :symbol :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
-     (":for %%% :being :each :present-symbol :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
-     (":for %%% :being :each :external-symbol :in _" map-form pve-cycle-%%%-to-first-char-of-current-name))
-
-    (((loop simple-loop-clauses) up-list)
-     (":for %%% :in _" map-form pve-cycle-%%%-to-first-char-of-current-name)
-     (":for _ :from 0 :to ")
-     (":for _ :from 0 :below ")
-     (":for %%% = _" map-form pve-cycle-%%%-to-first-char-of-current-name)
-     (":for %%% = _ :then " map-form pve-cycle-%%%-to-first-char-of-current-name)
-     (":for %%% :across _" map-form pve-cycle-%%%-to-first-char-of-current-name))
-
-    (((loop loop-clause) up-list)
-     "(simple-loop-clauses _)"
-     "(for-as-hash _)"
-     "(for-as-package _)")
-
-    (loop "(loop-clause _)"
-          (pve-cycle-include-context nil))
-
     ((defgeneric :method)
      ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
      (pve-cycle-include-context nil))
 
     (defgeneric
-      "(:method ()
+      "(:method (@)
     )"
       "(:documentation \"\")")
 
     (defmethod
       ("(%%% _)" map-form pve-cycle-%%%-to-first-char-of-current-name)
       (pve-cycle-include-context nil))
- 
-    (assert
-      "(null @_)"
-      "(not (null @_))")
 
     (asdf:defsystem 
      "(:file \"_\")"
@@ -426,10 +488,51 @@
 
     (((pve-cycle-add) up-list)
      ("ok" map-string (lambda (s)
+                        (let* ((form (car (read-from-string
+                                           pve-cycle-up-list-initially-sexp-string)))
+                               (command (rest form))
+                               (pattern (getf command 'pattern))
+                               (forms (getf command 'forms))
+                               (options (getf command 'options)))
+                          (print pve-cycle-up-list-initially-sexp-string)
+                          (print form)                          
+                          (if (listp pattern)
+                              (progn
+                                (pushnew (list* (list* pattern options)
+                                                forms)
+                                         pve-cycle-lisp-forms
+                                         :test #'equal
+                                         :key #'pve-cycle-pattern-key)
+                                (message "Ok.")
+                                pve-cycle-up-list-initially-sexp-string)
+                            (progn 
+                              (message "Error")
+                              pve-cycle-up-list-initially-sexp-string))))))
+
+    (((pve-cycle-replace) up-list)
+     ("ok" map-string (lambda (s)
+                        (let ((form (car (read-from-string pve-cycle-up-list-initially-sexp-string))))
+                          ()
+
+                          (if (and (listp (second form))
+                                   (<= 1 (length (second form))))
+                              (progn
+                                (pushnew (second form) pve-cycle-lisp-forms
+                                         :test #'equal
+                                         :key #'pve-cycle-pattern-key)
+                                (message "Ok.")
+                                pve-cycle-up-list-initially-sexp-string)
+                            (progn 
+                              (message "Error")
+                              pve-cycle-up-list-initially-sexp-string))))))
+    
+    (((pve-cycle-add) up-list)
+     ("ok" map-string (lambda (s)
                         (let ((form (car (read-from-string
-                                           pve-cycle-up-list-initially-sexp-string))))
+                                          pve-cycle-up-list-initially-sexp-string))))
                           (print pve-cycle-up-list-initially-sexp-string)
                           (print form)
+                          
                           (if (and (listp (second form))
                                    (<= 1 (length (second form))))
                               (progn
@@ -491,3 +594,4 @@
                        (if name
                            (replace-regexp-in-string "%%%" name string)
                          string)))))))
+
