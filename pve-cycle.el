@@ -307,7 +307,7 @@
           else do (push form complete-context))
     (nreverse complete-context)))
         
-(defun pve-cycle-test-lisp-forms (&optional lisp-forms)
+(defun pve-cycle-lisp-forms (&optional lisp-forms)
   (interactive)
   (when (null lisp-forms)
     (setf lisp-forms pve-cycle-lisp-forms))
