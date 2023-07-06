@@ -15,7 +15,7 @@
           `(princ (format "%s: %s: %s\n" ',tag ',thing ,thing))
         `(princ (format "%s: %s\n" ',thing ,thing)))
     '()))
- 
+
 ;; Basic functionality: Inserting strings in a cycle.
 
 (defun form-cycle-make-undo-function (length)
@@ -37,7 +37,7 @@
             (setf form-cycle-undo-previous-function nil))))
   (insert form)
   form)
-                            
+
 (defun form-cycle-next ()
   (form-cycle-debug form-cycle-current-cycle-state)
   (let ((next (pop form-cycle-current-cycle-state)))
@@ -183,7 +183,7 @@
   (interactive)
   (let ((form-cycle-function 'form-cycle-with-name))
     (form-cycle-initiate '("(defun _ () @)"
-                          "(defclass _ () (@))"))))
+                           "(defclass _ () (@))"))))
 
 ;; Context aware lisp forms
 
@@ -205,20 +205,20 @@
 
 (defun form-cycle-toplevel-form-nth (n)
   (condition-case nil
-    (save-excursion 
-      (beginning-of-defun)
-      (down-list)
-      (forward-sexp n)
-      (symbol-name (symbol-at-point)))
+      (save-excursion 
+        (beginning-of-defun)
+        (down-list)
+        (forward-sexp n)
+        (symbol-name (symbol-at-point)))
     (error nil)))
 
 (defun form-cycle-toplevel-form-name ()
   (condition-case nil
-    (save-excursion 
-      (beginning-of-defun)
-      (down-list)
-      (forward-sexp 2)
-      (symbol-name (symbol-at-point)))
+      (save-excursion 
+        (beginning-of-defun)
+        (down-list)
+        (forward-sexp 2)
+        (symbol-name (symbol-at-point)))
     (error nil)))
 
 (defun form-cycle-match-context-pattern (pattern context)
@@ -234,7 +234,7 @@
           when (null pattern-rest)
           return t
           finally return nil))) ; if complete pattern was not matched       
-  
+
 (defun pve-surrounding-sexp-car ()
   (save-excursion
     (ignore-errors
@@ -284,7 +284,7 @@
         ;; Matched-context is the list of forms, i.e. the second
         ;; element of the context.
         (list 'forms (form-cycle-process-includes matched-context
-                                                 known-contexts)
+                                                  known-contexts)
               'options options)))))
 
 (defun form-cycle-pattern-key (context)
@@ -306,7 +306,7 @@
                    do (push form2 complete-context))
           else do (push form complete-context))
     (nreverse complete-context)))
-        
+
 (defun form-cycle-lisp-forms (&optional lisp-forms)
   (interactive)
   (when (null lisp-forms)
@@ -384,7 +384,7 @@
      "\"~A~%\""
      "\"~{~A~^, ~}~%\""
      "\"~{~S~^, ~}~%\"")
- 
+    
     (assert
      "(null @_)"
      "(not (null @_))")
@@ -545,8 +545,8 @@
                           (print form-cycle-up-list-initially-sexp-string)
                           (print form)
                           (form-cycle-find-interactively (second form)))
-                          form-cycle-up-list-initially-sexp-string))
-      place-point 1)
+                        form-cycle-up-list-initially-sexp-string))
+     place-point 1)
 
     ;; Always matches.
     (nil "(setf _ @)"
