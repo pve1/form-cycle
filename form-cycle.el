@@ -295,7 +295,7 @@
                   (eq (first form) 'form-cycle-include-context))
           do (loop for form2 in (rest (find (second form) ; foo 
                                             known-contexts
-                                            :key #'form-cycle-pattern-key
+                                            :key #'form-cycle-context-pattern
                                             :test #'equal))
                    do (push form2 complete-context))
           else do (push form complete-context))
@@ -391,7 +391,7 @@
                         forms)
                  form-cycle-lisp-forms
                  :test #'equal
-                 :key #'form-cycle-pattern-key)
+                 :key #'form-cycle-context-pattern)
         t)
     nil))
 
@@ -488,7 +488,7 @@
 
 (defun form-cycle-find (pattern)
   (find pattern form-cycle-lisp-forms
-        :key #'form-cycle-pattern-key
+        :key #'form-cycle-context-pattern
         :test #'equal))
 
 (defun form-cycle-find-semi-interactively (pattern)
@@ -499,7 +499,7 @@
       (progn
         (setf form-cycle-lisp-forms
               (cl-delete pattern form-cycle-lisp-forms
-                         :key #'form-cycle-pattern-key
+                         :key #'form-cycle-context-pattern
                          :test #'equal))
         t)
     nil))
