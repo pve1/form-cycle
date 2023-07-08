@@ -244,7 +244,7 @@
             return t
             finally return nil)))) ; if complete pattern was not matched 
 
-(defun pve-surrounding-sexp-car ()
+(defun form-cycle-surrounding-sexp-car ()
   (save-excursion
     (ignore-errors
       (up-list -1)
@@ -263,7 +263,7 @@
   (save-excursion
     (nreverse
      (loop until (form-cycle-at-toplevel-p)
-           for car = (pve-surrounding-sexp-car)
+           for car = (form-cycle-surrounding-sexp-car)
            collect car
            do (up-list -1)))))
 
