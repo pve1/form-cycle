@@ -225,25 +225,6 @@
         (symbol-name (symbol-at-point)))
     (error nil)))
 
-(defun form-cycle-match-context-pattern (pattern context-pattern)
-  (if (and (null pattern)
-           (null context-pattern))
-      'match-toplevel
-    (progn   
-      (when (and (symbolp pattern)
-                 (setf pattern (list pattern))))
-      (loop with pattern-rest = pattern
-            for pattern-head = (car pattern-rest)
-            for part in context-pattern
-            when 
-            ;; (and part              ; skip nil
-            ;;      (eq part pattern-head))
-            (eq part pattern-head)
-            do (setf pattern-rest (rest pattern-rest))
-            when (null pattern-rest)
-            return t
-            finally return nil)))) ; if complete pattern was not matched 
-
 (defun form-cycle-surrounding-sexp-car ()
   (save-excursion
     (ignore-errors
@@ -266,6 +247,23 @@
            for car = (form-cycle-surrounding-sexp-car)
            collect car
            do (up-list -1)))))
+
+(defun form-cycle-match-context-pattern (pattern current-context)
+  (if (and (null pattern)
+           (null current-context))
+      'match-toplevel
+    (progn   
+      (when (and (symbolp pattern)
+                 (setf pattern (list pattern))))
+      (loop with pattern-rest = pattern
+            for pattern-head = (car pattern-rest)
+            for part in current-context
+            when (or (eq part pattern-head)
+                     (equal '(*) pattern-head))
+            do (setf pattern-rest (rest pattern-rest))
+            when (null pattern-rest)
+            return t
+            finally return nil)))) ; if complete pattern was not matched 
 
 (defun form-cycle-determine-context (known-contexts)
   (save-excursion
@@ -324,7 +322,8 @@
   (when (null lisp-forms)
     (setf lisp-forms form-cycle-lisp-forms))
   (let ((form-cycle-function 'form-cycle-with-name)
-        (context (first (form-cycle-determine-matching-contexts lisp-forms)))
+        (context (first (form-cycle-determine-matching-contexts 
+                         lisp-forms)))
         (form-cycle-up-list-initially-p)
         (form-cycle-up-list-initially-sexp-string)
         (form-cycle-raise-list-initially-p))
@@ -335,8 +334,6 @@
     (form-cycle-initiate (form-cycle-context-forms context))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; (pop form-cycle-lisp-forms)
 
 (defun form-cycle-check-plist (thing)
   (check-type thing list)
@@ -369,8 +366,6 @@
   (list (list* 'pattern pattern)
         (list* 'options options)
         (list* 'forms forms)))
-
-;; (form-cycle-make-context '(foo bar) '("asd" "asdsd"))
 
 (defun form-cycle-context-pattern (context)
   (cdr (assq 'pattern context)))
@@ -428,15 +423,16 @@
        (nthcdr 2 forms)
        (nth 1 forms)))))
 
-;; (form-cycle-add '(bar) '("qwe") nil)
-;; (setf form-cycle-lisp-forms nil)
-;; (form-cycle-find '(bar))
-
 ;; Manipulation
+
+(defmacro form-cycle-define-pattern (pattern options &rest forms)
+  `(form-cycle-add ',pattern ',forms ',options))
+
+(put 'form-cycle-define-pattern 'lisp-indent-function 2)
 
 (defun form-cycle-add (pattern forms &optional options)
   (if (form-cycle-find pattern)
-      (error "Context already exists.")
+      (form-cycle-replace pattern forms options)
     (pushnew (form-cycle-make-context pattern forms options)
              form-cycle-lisp-forms
              :test #'equal
