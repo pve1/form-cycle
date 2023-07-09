@@ -43,11 +43,11 @@
   (let ((next (pop form-cycle-current-cycle-state)))
     (when next
       (setf form-cycle-current-cycle-state
-            (append form-cycle-current-cycle-state (list next))))
-    (when form-cycle-undo-previous-function
-      (funcall form-cycle-undo-previous-function))
-    (funcall form-cycle-function next) 
-    (setf form-cycle-position (point))))
+            (append form-cycle-current-cycle-state (list next)))
+      (when form-cycle-undo-previous-function
+        (funcall form-cycle-undo-previous-function))
+      (funcall form-cycle-function next) 
+      (setf form-cycle-position (point)))))
 
 (defun form-cycle-new-cycle-p ()
   (or (null form-cycle-position)
