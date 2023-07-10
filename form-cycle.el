@@ -98,17 +98,24 @@
         (setf form-cycle-up-list-initially-sexp-string
               (buffer-substring-no-properties
                (point) 
-               (progn (forward-sexp) (point)))))) 
+               (progn (forward-sexp) (point))))))     
     (let ((sym (symbol-at-point)))
-      (if (and sym
-               (string-match "^\\_<" (symbol-name sym)))
-          (progn
-            (unless (looking-at "\\_<")
-              (beginning-of-sexp))
-            (kill-sexp)
-            (setf form-cycle-current-name (symbol-name sym)
-                  form-cycle-initial-position (point)))
-        (setf form-cycle-current-name "")))
+      (cond ((and sym
+                  (string-match "^\\_<" (symbol-name sym)))
+             (unless (looking-at "\\_<")
+               (beginning-of-sexp))
+             (kill-sexp)
+             (setf form-cycle-current-name (symbol-name sym)
+                   form-cycle-initial-position (point)))
+
+            ((and (not sym)
+                  (looking-at "("))
+             (kill-sexp)
+             (setf form-cycle-current-name (substring-no-properties
+                                            (current-kill 0))
+                   form-cycle-initial-position (point)))
+            (t (setf form-cycle-current-name ""))))
+
     (when form-cycle-up-list-initially-p
       (up-list -1)             
       (kill-sexp)      
@@ -138,7 +145,20 @@
       (insert form-string)
       (beginning-of-buffer)
       ;; _ -> name
-      (replace-string form-cycle-name-marker form-cycle-current-name)
+      (if (equal form-cycle-current-name "")
+          ;; Ignore @, place point at _ instead.
+          (let ()
+            ;; _ -> @
+            (save-excursion (replace-string form-cycle-name-marker 
+                                            form-cycle-point-marker
+                                            nil 1 (buffer-end 1)))
+            ;; Find first @
+            (search-forward form-cycle-point-marker nil t)
+            (unless (eobp)
+              (forward-char))
+            ;; Delete the other @'s
+            (save-excursion (replace-string form-cycle-point-marker "")))
+        (replace-string form-cycle-name-marker form-cycle-current-name))
       (beginning-of-buffer)
       ;; Figure out where to place point
       (when (search-forward form-cycle-point-marker nil t)
@@ -319,6 +339,7 @@
                  (push pat patterns-included)))
           else do (push form complete-context))
 
+    ;; Recurse if an include directive was found.
     (if patterns-included
         (form-cycle-process-includes
          (form-cycle-make-context 
