@@ -303,27 +303,44 @@
               when (form-cycle-match-context-pattern pat current-context)
               collect c)))))
 
-(defun form-cycle-process-includes (context known-contexts)
+(defun form-cycle-process-includes (context known-contexts &optional already-included)
   ;; Context is the one chosen by form-cycle-determine-context.
-  (let (complete-context)
-    (loop for form in context
-          if (and (consp form) ; (form-cycle-include-context foo)
-                  (eq (first form) 'form-cycle-include-context))
-          do (loop for form2 in (rest (find (second form) ; foo 
-                                            known-contexts
-                                            :key #'form-cycle-context-pattern
-                                            :test #'equal))
-                   do (push form2 complete-context))
+  (let (complete-context
+        patterns-included)
+    (loop for form in (form-cycle-context-forms context)
+          if (and (consp form) ; (form-cycle-include foo)
+                  (eq (first form) 'form-cycle-include))
+          do (let ((pat (rest form)))
+               (unless (or (find pat already-included :test #'equal)
+                           (find pat patterns-included :test #'equal))                 
+                 (loop for form2 in (form-cycle-context-forms
+                                     (form-cycle-find pat))
+                       do (push form2 complete-context))
+                 (push pat patterns-included)))
           else do (push form complete-context))
-    (nreverse complete-context)))
+
+    (if patterns-included
+        (form-cycle-process-includes
+         (form-cycle-make-context 
+          (form-cycle-context-pattern context)
+          (nreverse complete-context)
+          (form-cycle-context-pattern-options context))
+         known-contexts
+         (append patterns-included already-included))
+      (form-cycle-make-context 
+       (form-cycle-context-pattern context)
+       (nreverse complete-context)
+       (form-cycle-context-pattern-options context)))))
 
 (defun form-cycle-lisp-forms (&optional lisp-forms)
   (interactive)
   (when (null lisp-forms)
     (setf lisp-forms form-cycle-lisp-forms))
   (let ((form-cycle-function 'form-cycle-with-name)
-        (context (first (form-cycle-determine-matching-contexts 
-                         lisp-forms)))
+        (context (form-cycle-process-includes
+                  (first (form-cycle-determine-matching-contexts 
+                          lisp-forms))
+                  lisp-forms))
         (form-cycle-up-list-initially-p)
         (form-cycle-up-list-initially-sexp-string)
         (form-cycle-raise-list-initially-p))
@@ -359,7 +376,7 @@
     (form-cycle-check-option opt))
   (dolist (f forms)
     (if (listp f)
-        (unless (eq (car f) 'form-cycle-include-context)
+        (unless (eq (car f) 'form-cycle-include)
           (check-type (car f) string)
           (form-cycle-check-alist (rest f)))
       (check-type f string)))
