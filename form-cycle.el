@@ -267,51 +267,26 @@
            collect car
            do (up-list -1)))))
 
-(defun form-cycle-match-context-pattern (pattern current-context)
+(defun form-cycle-match-context-pattern (pattern current-context &optional allowed-range)
   (if (and (null pattern)
            (null current-context))
       'match-toplevel
     (progn   
       (when (and (symbolp pattern)
                  (setf pattern (list pattern))))
-      (loop with pattern-rest = pattern
+      (form-cycle-debug allowed-range)
+      (loop with pattern-rest = (reverse pattern)
+            for range from 0
             for pattern-head = (car pattern-rest)
-            for part in current-context
-            when (or (eq part pattern-head)
-                     (equal '(*) pattern-head))
+            for part in (reverse current-context)
+            when (and (or (eq part pattern-head)
+                          (equal '(*) pattern-head))
+                      (or (null allowed-range)
+                          (<= range allowed-range)))
             do (setf pattern-rest (rest pattern-rest))
             when (null pattern-rest)
             return t
             finally return nil)))) ; if complete pattern was not matched 
-
-(defun form-cycle-determine-context (known-contexts)
-  (save-excursion
-    (block done 
-      (let* ((top-level t)
-             (current-context (or (form-cycle-gather-context)
-                                  '(cycle-toplevel)))
-             (options)
-             (matched-context
-              (loop for c in known-contexts
-                    for opts = nil
-                    for pat = (cond ((null (car c))
-                                     nil)
-                                    ((symbolp (car c))
-                                     (list (car c)))
-                                        ; Have options
-                                    ((and (listp (car c))
-                                          (listp (caar c)))
-                                     (setf opts (rest (car c)))
-                                     (caar c)) 
-                                    (t (car c))) 
-                    when (form-cycle-match-context-pattern pat current-context)
-                    return (progn (setf options opts)
-                                  (rest c))))) 
-        ;; Matched-context is the list of forms, i.e. the second
-        ;; element of the context.
-        (list 'forms (form-cycle-process-includes matched-context
-                                                  known-contexts)
-              'options options)))))
 
 (defun form-cycle-determine-matching-contexts (known-contexts)
   (save-excursion
@@ -319,11 +294,11 @@
       (let* ((current-context (form-cycle-gather-context)))
         (loop for c in known-contexts
               for pat = (form-cycle-context-pattern c)
-              when (form-cycle-match-context-pattern pat current-context)
+              for range = (form-cycle-context-match-range c)
+              when (form-cycle-match-context-pattern pat current-context range)
               collect c)))))
 
 (defun form-cycle-process-includes (context known-contexts &optional already-included)
-  ;; Context is the one chosen by form-cycle-determine-context.
   (let (complete-context
         patterns-included)
     (loop for form in (form-cycle-context-forms context)
@@ -356,14 +331,22 @@
   (interactive)
   (when (null lisp-forms)
     (setf lisp-forms form-cycle-lisp-forms))
-  (let ((form-cycle-function 'form-cycle-with-name)
-        (context (form-cycle-process-includes
-                  (first (form-cycle-determine-matching-contexts 
-                          lisp-forms))
-                  lisp-forms))
-        (form-cycle-up-list-initially-p)
-        (form-cycle-up-list-initially-sexp-string)
-        (form-cycle-raise-list-initially-p))
+  (let* ((form-cycle-function 'form-cycle-with-name)
+         (matching-contexts (form-cycle-determine-matching-contexts 
+                             lisp-forms))
+         (context (form-cycle-process-includes
+                   (first matching-contexts)
+                   lisp-forms))
+         (form-cycle-up-list-initially-p)
+         (form-cycle-up-list-initially-sexp-string)
+         (form-cycle-raise-list-initially-p))
+
+    (form-cycle-debug (mapcar 
+                       (lambda (x) (form-cycle-context-pattern x))
+                       matching-contexts))
+
+    (form-cycle-debug (form-cycle-gather-context)) 
+
     (loop for opt in (form-cycle-context-pattern-options context)
           do
           (case opt
@@ -426,6 +409,14 @@
 
 (defun form-cycle-context-forms (context)
   (cdr (assq 'forms context)))
+
+(defun form-cycle-context-match-range (context)
+  (let ((r (form-cycle-context-pattern-assoc context 'range)))
+    (if r 
+        (second r)
+      (if (form-cycle-context-pattern-assoc context 'immediate)
+          0
+        nil))))  
   
 (defun form-cycle-context-form-options (form)
   (if (listp form)
