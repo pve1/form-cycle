@@ -146,7 +146,8 @@
       (beginning-of-buffer)
       ;; _ -> name
       (if (equal form-cycle-current-name "")
-          ;; Ignore @, place point at _ instead.
+          ;; If no name was given, ignore @ and place point at _
+          ;; instead.
           (let ()
             ;; _ -> @
             (save-excursion (replace-string form-cycle-name-marker 
@@ -154,8 +155,6 @@
                                             nil 1 (buffer-end 1)))
             ;; Find first @
             (search-forward form-cycle-point-marker nil t)
-            (unless (eobp)
-              (forward-char))
             ;; Delete the other @'s
             (save-excursion (replace-string form-cycle-point-marker "")))
         (replace-string form-cycle-name-marker form-cycle-current-name))
@@ -530,10 +529,13 @@
   (save-excursion
     (beginning-of-buffer)
     (let ((context (form-cycle-read-context-from-buffer)))
-      (form-cycle-replace-semi-interactively
-       (form-cycle-context-pattern context)
-       (form-cycle-context-forms context)
-       (form-cycle-context-pattern-options context)))))
+      (if (null (form-cycle-context-forms context))
+          (form-cycle-delete-semi-interactively 
+           (form-cycle-context-pattern context))    
+        (form-cycle-replace-semi-interactively
+         (form-cycle-context-pattern context)
+         (form-cycle-context-forms context)
+         (form-cycle-context-pattern-options context))))))
 
 (defun form-cycle-open-context-edit-buffer (context)
   (let ((buf (get-buffer-create "*Form cycle edit*")))
@@ -544,7 +546,8 @@
     (insert ";; Press C-c C-k to save this context.
 ;; Valid pattern options: up-list
 ;; Valid form options: map-form map-string after-cycle
-;; Form may also be (form-cycle-include-context PATTERN)
+;; Form may also be (form-cycle-include . PATTERN)
+;; If no forms are given, then the context is deleted.
 \n")
     (insert ";; Pattern\n\n")
     (insert (prin1-to-string
