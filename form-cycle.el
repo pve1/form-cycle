@@ -469,10 +469,10 @@
 (defun form-cycle-add-semi-interactively (pattern forms &optional options)
   (if (form-cycle-add pattern forms options)
       (progn
-        (message "Ok.")
+        (message "Added.")
         t)
     (progn 
-      (message "Error")
+      (message "Error adding.")
       nil)))
 
 ;; Adds a form to the context.
@@ -486,11 +486,13 @@
                                         t))
          (exist (form-cycle-find pattern)))
     (if exist
-        (form-cycle-replace-semi-interactively 
-         pattern
-         (append (list (buffer-substring-no-properties b e))
-                 (form-cycle-context-forms exist))
-         (form-cycle-context-pattern-options exist))
+        (progn 
+          (form-cycle-replace 
+           pattern
+           (append (list (buffer-substring-no-properties b e))
+                   (form-cycle-context-forms exist))
+           (form-cycle-context-pattern-options exist))
+          (message "Added."))
       (form-cycle-add-semi-interactively 
        pattern 
        (list (buffer-substring-no-properties
@@ -505,10 +507,11 @@
                                         nil 
                                         t))
          (exist (form-cycle-find pattern)))
-    (unless exist
-      (form-cycle-add pattern nil nil)
-      (setf exist (form-cycle-find pattern)))
-    (form-cycle-open-context-edit-buffer exist)))
+    ;; (unless exist
+    ;;   (form-cycle-add pattern nil nil)
+    ;;   (setf exist (form-cycle-find pattern)))
+    (form-cycle-open-context-edit-buffer 
+     (or exist (form-cycle-make-context pattern nil nil)))))
 
 (define-minor-mode form-cycle-edit-mode "" nil " Form-Cycle-Edit"
   '(("\C-c\C-k" . form-cycle-edit-save))
@@ -519,14 +522,25 @@
   (interactive)
   (save-excursion
     (beginning-of-buffer)
-    (let ((context (form-cycle-read-context-from-buffer)))
-      (if (null (form-cycle-context-forms context))
-          (form-cycle-delete-semi-interactively 
-           (form-cycle-context-pattern context))    
-        (form-cycle-replace-semi-interactively
-         (form-cycle-context-pattern context)
-         (form-cycle-context-forms context)
-         (form-cycle-context-pattern-options context))))))
+    (let* ((context (form-cycle-read-context-from-buffer))
+           (exist (form-cycle-find 
+                   (form-cycle-context-pattern context))))
+      (cond ((and exist 
+                  (null (form-cycle-context-forms context)))
+             (form-cycle-delete-semi-interactively 
+              (form-cycle-context-pattern context)))
+            
+            (exist
+             (form-cycle-replace-semi-interactively
+              (form-cycle-context-pattern context)
+              (form-cycle-context-forms context)
+              (form-cycle-context-pattern-options context)))
+
+            ((not exist)
+             (form-cycle-add-semi-interactively 
+              (form-cycle-context-pattern context)
+              (form-cycle-context-forms context)
+              (form-cycle-context-pattern-options context)))))))
 
 (defun form-cycle-open-context-edit-buffer (context)
   (let ((buf (get-buffer-create "*Form cycle edit*")))
@@ -535,7 +549,7 @@
     (form-cycle-edit-mode 1)
     (delete-region 1 (buffer-end 1))
     (insert ";; Press C-c C-k to save this context.
-;; Valid pattern options: up-list
+;; Valid pattern options: up-list immediate (range N)
 ;; Valid form options: map-form map-string after-cycle
 ;; Form may also be (form-cycle-include . PATTERN)
 ;; If no forms are given, then the context is deleted.
@@ -568,7 +582,7 @@
     (form-cycle-add (form-cycle-context-pattern exist)
                     (form-cycle-context-forms exist) 
                     (form-cycle-context-pattern-options exist))
-    (message "Ok.")))
+    (message "Moved to front.")))
 
 (defun form-cycle-find (pattern)
   (find pattern 
@@ -598,7 +612,7 @@
   (if (form-cycle-delete pattern)
       (progn (message "Deleted.")
              t)
-    (progn (message "Error")
+    (progn (message "Error deleting.")
            nil)))
 
 (defun form-cycle-delete-interactively ()
@@ -613,201 +627,203 @@
 
 (defun form-cycle-replace (pattern forms &optional options)
   (let ((pos (form-cycle-context-position pattern)))
-    (when pos
-      (setf (nth pos form-cycle-lisp-forms)
-            (form-cycle-make-context pattern forms options)))))
+    (if pos
+        (setf (nth pos form-cycle-lisp-forms)
+              (form-cycle-make-context pattern forms options))
+      nil)))
 
 (defun form-cycle-replace-semi-interactively (pattern forms &optional options)
-  (form-cycle-replace pattern forms options)
-  (message "Ok.")) 
+  (if (form-cycle-replace pattern forms options)
+      (message "Replaced.")
+    (error "Error replacing.")))
 
 (defvar form-cycle-lisp-forms nil)
 
-(defvar form-cycle-lisp-forms
-  '((progn (form-cycle-include-context nil))
-
-    (format 
-     "\"~S~%\""
-     "\"~A~%\""
-     "\"~{~A~^, ~}~%\""
-     "\"~{~S~^, ~}~%\"")
-    
-    (assert
-     "(null @_)"
-     "(not (null @_))")
-
-    (((loop for-as-hash) up-list)
-     (":for _ :being :each :hash-key :using (:hash-value val) :in @")
-     (":for %%% :being :each :hash-key :using (:hash-value val) :in _"
-      map-form form-cycle-%%%-to-first-char-of-current-name)
-     (":for _ :being :each :hash-value :using (:hash-key key) :in @")
-     (":for %%% :being :each :hash-value :using (:hash-key key) :in _"
-      map-form form-cycle-%%%-to-first-char-of-current-name))
-
-    (((loop for-as-package) up-list)
-     (":for sym :being :each :symbol :in @" 
-      map-form form-cycle-%%%-to-first-char-of-current-name)
-
-     (":for sym :being :each :present-symbol :in @" map-form form-cycle-%%%-to-first-char-of-current-name)
-     (":for sym :being :each :external-symbol :in @" map-form form-cycle-%%%-to-first-char-of-current-name)
-     (":for sym :being :each :symbol :in (find-package \"_\")"
-      map-form (lambda (form) 
-                 (setf form-cycle-current-name (upcase form-cycle-current-name))
-                 form))
-     (":for sym :being :each :present-symbol :in (find-package \"_\")"
-      map-form (lambda (form) 
-                 (setf form-cycle-current-name (upcase form-cycle-current-name))
-                 form))
-     (":for sym :being :each :external-symbol :in (find-package \"_\")"
-      map-form (lambda (form) 
-                 (setf form-cycle-current-name (upcase form-cycle-current-name))
-                 form)))
-
-    (((loop simple-loop-clauses) up-list)
-     (":for %%% :in _" map-form form-cycle-%%%-to-first-char-of-current-name)
-     (":for _ :from 0 :to ")
-     (":for _ :from 0 :below ")
-     (":for %%% = _" map-form form-cycle-%%%-to-first-char-of-current-name)
-     (":for %%% = _ :then " map-form form-cycle-%%%-to-first-char-of-current-name)
-     (":for %%% :across _" map-form form-cycle-%%%-to-first-char-of-current-name))
-
-    (((loop loop-clause) up-list)
-     "(simple-loop-clauses _@)"
-     "(for-as-hash _@)"
-     "(for-as-package _@)")
-
-    (loop "(loop-clause _@)"
-          (form-cycle-include-context nil))
-
-    (cycle-toplevel
-     "(defun _ (@)\n  )"
-     "(defmethod _ (@)\n  )"
-     "(defgeneric _ (@))"
-     "(defclass _ ()\n  (@))"
-     "(defvar _ @)"
-     "(defparameter _ @)"
-     ("(defmethod initialize-instance :after ((%%% _) &key)\n  @)" 
-      map-form form-cycle-%%%-to-first-char-of-current-name)
-     "(defpackage #:_
-  (:use #:cl)
-  (:local-nicknames)
-  (:export))\n\n(in-package #:_)")
-
-    (defclass
-      "(%_ :initarg :_ :initform nil)"
-      "(%_ :initarg :_ :accessor _ :initform nil)"
-      ("(%_ :initarg :_
-    :accessor _
-    :initform nil)" after-cycle form-cycle-indent-defun)
-      ("(%_ :initarg :_
-    :accessor %%%-_
-    :initform nil)" 
-       map-form (lambda (string) 
-                  (replace-regexp-in-string "%%%" 
-                                            (form-cycle-toplevel-form-name)
-                                            string))
-       after-cycle form-cycle-indent-defun))
-
-    ((defpackage :local-nicknames)
-     ("\"_\"" map-string upcase)
-     "#:_"
-     ("(#:%%% #:_)" map-form form-cycle-%%%-to-first-char-of-current-name)
-     ("(#:%%% #:_)" map-form form-cycle-%%%-to-first-two-chars-of-current-name)
-     ("(#:%%% #:_)" map-form (lambda (form)
-                               (form-cycle-%%%-to-subseq-of-current-name form 3))))
-
-    (((defpackage option) up-list)
-     ("(:use @)
-  (option)")
-     ("(:local-nicknames @)
-  (option)")
-     ("(:export @)
-  (option)")
-     ("(:shadow @)
-  (option)")
-     ("(:shadowing-import-from @)
-  (option)")
-     ("(:import-from @)
-  (option)")
-     ("(:documentation \"@\")
-  (option)"))
-
-    ((defpackage)
-     ("\"_\"" map-string upcase)
-     "#:_"
-     "(option)")
-    
-    ((defgeneric :method)
-     ("(%%% _)" map-form form-cycle-%%%-to-first-char-of-current-name)
-     (form-cycle-include-context nil))
-
-    (defgeneric
-      "(:method (@)
-    )"
-      "(:documentation \"\")")
-
-    (defmethod
-      ("(%%% _)" map-form form-cycle-%%%-to-first-char-of-current-name)
-      (form-cycle-include-context nil))
-
-    (asdf:defsystem 
-     "(:file \"_\")"
-     "(:module \"_\"
-                        :components (@))")
-
-    (((form-cycle-add) up-list)
-     ("ok" map-string (lambda (s)
-                        (let* ((form (car (read-from-string
-                                           form-cycle-up-list-initially-sexp-string)))
-                               (command (rest form))
-                               (pattern (getf command 'pattern))
-                               (forms (getf command 'forms))
-                               (options (getf command 'options)))
-                          (form-cycle-add-semi-interactively pattern forms options)
-                          form-cycle-up-list-initially-sexp-string))
-      place-point 1))
-
-    (((form-cycle-replace) up-list)
-     ("ok" map-string (lambda (s)
-                        (let* ((form (car (read-from-string
-                                           form-cycle-up-list-initially-sexp-string)))
-                               (command (rest form))
-                               (pattern (getf command 'pattern))
-                               (forms (getf command 'forms))
-                               (options (getf command 'options)))
-                          (form-cycle-replace-semi-interactively pattern forms options)
-                          form-cycle-up-list-initially-sexp-string))
-      place-point 1))
-    
-    (((form-cycle-delete) up-list)
-     ("ok" map-string (lambda (s)
-                        (let ((form (car (read-from-string
-                                          form-cycle-up-list-initially-sexp-string))))
-                          (form-cycle-delete-semi-interactively (second form))
-                          form-cycle-up-list-initially-sexp-string))
-      place-point 1))
-
-    (((form-cycle-find) up-list)
-     ("ok" map-string (lambda (s)
-                        (let ((form (car (read-from-string
-                                          form-cycle-up-list-initially-sexp-string))))
-                          (form-cycle-find-semi-interactively (second form)))
-                        form-cycle-up-list-initially-sexp-string))
-     place-point 1)
-
-    ;; Always matches.
-    (nil "(setf _ @)"
-         "(make-instance '_ @)"
-         "(let ((_ @))\n    )"
-         "(let* ((_ @))\n    )"
-         "(lambda (_) @)"
-         "(check-type _ @)"
-         "(assert @_)"
-         "(declare (ignore _))"
-         ("(return-from %%% @_)"        
-          map-form (lambda (string) 
-                     (let ((name (form-cycle-toplevel-form-name)))
-                       (if name
-                           (replace-regexp-in-string "%%%" name string)
-                         string)))))))
+;; (defvar form-cycle-lisp-forms
+;;   '((progn (form-cycle-include-context nil))
+;; 
+;;     (format 
+;;      "\"~S~%\""
+;;      "\"~A~%\""
+;;      "\"~{~A~^, ~}~%\""
+;;      "\"~{~S~^, ~}~%\"")
+;;     
+;;     (assert
+;;      "(null @_)"
+;;      "(not (null @_))")
+;; 
+;;     (((loop for-as-hash) up-list)
+;;      (":for _ :being :each :hash-key :using (:hash-value val) :in @")
+;;      (":for %%% :being :each :hash-key :using (:hash-value val) :in _"
+;;       map-form form-cycle-%%%-to-first-char-of-current-name)
+;;      (":for _ :being :each :hash-value :using (:hash-key key) :in @")
+;;      (":for %%% :being :each :hash-value :using (:hash-key key) :in _"
+;;       map-form form-cycle-%%%-to-first-char-of-current-name))
+;; 
+;;     (((loop for-as-package) up-list)
+;;      (":for sym :being :each :symbol :in @" 
+;;       map-form form-cycle-%%%-to-first-char-of-current-name)
+;; 
+;;      (":for sym :being :each :present-symbol :in @" map-form form-cycle-%%%-to-first-char-of-current-name)
+;;      (":for sym :being :each :external-symbol :in @" map-form form-cycle-%%%-to-first-char-of-current-name)
+;;      (":for sym :being :each :symbol :in (find-package \"_\")"
+;;       map-form (lambda (form) 
+;;                  (setf form-cycle-current-name (upcase form-cycle-current-name))
+;;                  form))
+;;      (":for sym :being :each :present-symbol :in (find-package \"_\")"
+;;       map-form (lambda (form) 
+;;                  (setf form-cycle-current-name (upcase form-cycle-current-name))
+;;                  form))
+;;      (":for sym :being :each :external-symbol :in (find-package \"_\")"
+;;       map-form (lambda (form) 
+;;                  (setf form-cycle-current-name (upcase form-cycle-current-name))
+;;                  form)))
+;; 
+;;     (((loop simple-loop-clauses) up-list)
+;;      (":for %%% :in _" map-form form-cycle-%%%-to-first-char-of-current-name)
+;;      (":for _ :from 0 :to ")
+;;      (":for _ :from 0 :below ")
+;;      (":for %%% = _" map-form form-cycle-%%%-to-first-char-of-current-name)
+;;      (":for %%% = _ :then " map-form form-cycle-%%%-to-first-char-of-current-name)
+;;      (":for %%% :across _" map-form form-cycle-%%%-to-first-char-of-current-name))
+;; 
+;;     (((loop loop-clause) up-list)
+;;      "(simple-loop-clauses _@)"
+;;      "(for-as-hash _@)"
+;;      "(for-as-package _@)")
+;; 
+;;     (loop "(loop-clause _@)"
+;;           (form-cycle-include-context nil))
+;; 
+;;     (cycle-toplevel
+;;      "(defun _ (@)\n  )"
+;;      "(defmethod _ (@)\n  )"
+;;      "(defgeneric _ (@))"
+;;      "(defclass _ ()\n  (@))"
+;;      "(defvar _ @)"
+;;      "(defparameter _ @)"
+;;      ("(defmethod initialize-instance :after ((%%% _) &key)\n  @)" 
+;;       map-form form-cycle-%%%-to-first-char-of-current-name)
+;;      "(defpackage #:_
+;;   (:use #:cl)
+;;   (:local-nicknames)
+;;   (:export))\n\n(in-package #:_)")
+;; 
+;;     (defclass
+;;       "(%_ :initarg :_ :initform nil)"
+;;       "(%_ :initarg :_ :accessor _ :initform nil)"
+;;       ("(%_ :initarg :_
+;;     :accessor _
+;;     :initform nil)" after-cycle form-cycle-indent-defun)
+;;       ("(%_ :initarg :_
+;;     :accessor %%%-_
+;;     :initform nil)" 
+;;        map-form (lambda (string) 
+;;                   (replace-regexp-in-string "%%%" 
+;;                                             (form-cycle-toplevel-form-name)
+;;                                             string))
+;;        after-cycle form-cycle-indent-defun))
+;; 
+;;     ((defpackage :local-nicknames)
+;;      ("\"_\"" map-string upcase)
+;;      "#:_"
+;;      ("(#:%%% #:_)" map-form form-cycle-%%%-to-first-char-of-current-name)
+;;      ("(#:%%% #:_)" map-form form-cycle-%%%-to-first-two-chars-of-current-name)
+;;      ("(#:%%% #:_)" map-form (lambda (form)
+;;                                (form-cycle-%%%-to-subseq-of-current-name form 3))))
+;; 
+;;     (((defpackage option) up-list)
+;;      ("(:use @)
+;;   (option)")
+;;      ("(:local-nicknames @)
+;;   (option)")
+;;      ("(:export @)
+;;   (option)")
+;;      ("(:shadow @)
+;;   (option)")
+;;      ("(:shadowing-import-from @)
+;;   (option)")
+;;      ("(:import-from @)
+;;   (option)")
+;;      ("(:documentation \"@\")
+;;   (option)"))
+;; 
+;;     ((defpackage)
+;;      ("\"_\"" map-string upcase)
+;;      "#:_"
+;;      "(option)")
+;;     
+;;     ((defgeneric :method)
+;;      ("(%%% _)" map-form form-cycle-%%%-to-first-char-of-current-name)
+;;      (form-cycle-include-context nil))
+;; 
+;;     (defgeneric
+;;       "(:method (@)
+;;     )"
+;;       "(:documentation \"\")")
+;; 
+;;     (defmethod
+;;       ("(%%% _)" map-form form-cycle-%%%-to-first-char-of-current-name)
+;;       (form-cycle-include-context nil))
+;; 
+;;     (asdf:defsystem 
+;;      "(:file \"_\")"
+;;      "(:module \"_\"
+;;                         :components (@))")
+;; 
+;;     (((form-cycle-add) up-list)
+;;      ("ok" map-string (lambda (s)
+;;                         (let* ((form (car (read-from-string
+;;                                            form-cycle-up-list-initially-sexp-string)))
+;;                                (command (rest form))
+;;                                (pattern (getf command 'pattern))
+;;                                (forms (getf command 'forms))
+;;                                (options (getf command 'options)))
+;;                           (form-cycle-add-semi-interactively pattern forms options)
+;;                           form-cycle-up-list-initially-sexp-string))
+;;       place-point 1))
+;; 
+;;     (((form-cycle-replace) up-list)
+;;      ("ok" map-string (lambda (s)
+;;                         (let* ((form (car (read-from-string
+;;                                            form-cycle-up-list-initially-sexp-string)))
+;;                                (command (rest form))
+;;                                (pattern (getf command 'pattern))
+;;                                (forms (getf command 'forms))
+;;                                (options (getf command 'options)))
+;;                           (form-cycle-replace-semi-interactively pattern forms options)
+;;                           form-cycle-up-list-initially-sexp-string))
+;;       place-point 1))
+;;     
+;;     (((form-cycle-delete) up-list)
+;;      ("ok" map-string (lambda (s)
+;;                         (let ((form (car (read-from-string
+;;                                           form-cycle-up-list-initially-sexp-string))))
+;;                           (form-cycle-delete-semi-interactively (second form))
+;;                           form-cycle-up-list-initially-sexp-string))
+;;       place-point 1))
+;; 
+;;     (((form-cycle-find) up-list)
+;;      ("ok" map-string (lambda (s)
+;;                         (let ((form (car (read-from-string
+;;                                           form-cycle-up-list-initially-sexp-string))))
+;;                           (form-cycle-find-semi-interactively (second form)))
+;;                         form-cycle-up-list-initially-sexp-string))
+;;      place-point 1)
+;; 
+;;     ;; Always matches.
+;;     (nil "(setf _ @)"
+;;          "(make-instance '_ @)"
+;;          "(let ((_ @))\n    )"
+;;          "(let* ((_ @))\n    )"
+;;          "(lambda (_) @)"
+;;          "(check-type _ @)"
+;;          "(assert @_)"
+;;          "(declare (ignore _))"
+;;          ("(return-from %%% @_)"        
+;;           map-form (lambda (string) 
+;;                      (let ((name (form-cycle-toplevel-form-name)))
+;;                        (if name
+;;                            (replace-regexp-in-string "%%%" name string)
+;;                          string)))))))
 
