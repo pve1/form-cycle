@@ -184,7 +184,7 @@
       (let ((end (save-excursion
                    (let ((len (length string)))
                      (goto-char (+ form-cycle-initial-position len))
-                     (push-mark)
+                     (push-mark nil t)
                      (point)))))
         (save-excursion 
           (funcall (funcall getopt 'after-cycle)))
@@ -205,7 +205,7 @@
 
 ;; Context aware lisp forms
 
-(defvar form-cycle-lisp-forms nil)
+(defvar form-cycle-lisp-patterns nil)
 
 (defun form-cycle-%%%-to-subseq-of-current-name (form length)
   (if (< (length form-cycle-current-name) length)
@@ -277,8 +277,8 @@
     (when (and (null pattern)
                (null current-context))
       (return-from done t))
-    (when (symbolp pattern)
-      (setf pattern (list pattern)))
+    (unless (listp pattern)
+      (error "Bad pattern."))
     (form-cycle-debug allowed-range)
     (loop with pattern-rest = (reverse pattern)
           for range from 0
@@ -308,8 +308,8 @@
   (let (complete-context
         patterns-included)
     (loop for form in (form-cycle-context-forms context)
-          if (and (consp form) ; (form-cycle-include foo)
-                  (eq (first form) 'form-cycle-include))
+          if (and (consp form) ; (include foo)
+                  (eq (first form) 'include))
           do (let ((pat (rest form)))
                (unless (or (find pat already-included :test #'equal)
                            (find pat patterns-included :test #'equal))                 
@@ -333,10 +333,10 @@
        (nreverse complete-context)
        (form-cycle-context-pattern-options context)))))
 
-(defun form-cycle-lisp-forms (&optional lisp-forms initiate-fn)
+(defun form-cycle-lisp-patterns (&optional lisp-forms initiate-fn)
   (interactive)
   (when (null lisp-forms)
-    (setf lisp-forms form-cycle-lisp-forms))
+    (setf lisp-forms form-cycle-lisp-patterns))
   (let* ((form-cycle-function 'form-cycle-with-name)
          (matching-contexts (form-cycle-determine-matching-contexts 
                              lisp-forms))
@@ -346,6 +346,12 @@
          (form-cycle-up-list-initially-p)
          (form-cycle-up-list-initially-sexp-string)
          (form-cycle-raise-list-initially-p))
+
+    (when (< 1 (length matching-contexts))
+      (message "Matching patterns: %s"
+               (mapcar #'form-cycle-context-pattern 
+                       matching-contexts)))
+
     (form-cycle-debug (mapcar 
                        (lambda (x) (form-cycle-context-pattern x))
                        matching-contexts))
@@ -360,9 +366,9 @@
       (form-cycle-initiate
        (form-cycle-context-forms context)))))
 
-(defun form-cycle-lisp-forms-ido (&optional lisp-forms)
+(defun form-cycle-lisp-patterns-ido (&optional lisp-forms)
   (interactive)    
-  (form-cycle-lisp-forms 
+  (form-cycle-lisp-patterns 
    lisp-forms
    (lambda (context)
      (let* ((mangled-original-pairs)
@@ -411,7 +417,7 @@
     (form-cycle-check-option opt))
   (dolist (f forms)
     (if (listp f)
-        (unless (eq (car f) 'form-cycle-include)
+        (unless (eq (car f) 'include)
           (check-type (car f) string)
           (form-cycle-check-alist (rest f)))
       (check-type f string)))
@@ -524,7 +530,7 @@
   (if (form-cycle-find-context pattern)
       (form-cycle-replace-context pattern forms options)
     (pushnew (form-cycle-make-context pattern forms options)
-             form-cycle-lisp-forms
+             form-cycle-lisp-patterns
              :test #'equal
              :key #'form-cycle-context-pattern)))
 
@@ -615,7 +621,7 @@
 ;; Press C-c C-s to write all patterns to a file.
 ;; Valid pattern options: up-list toplevel (depth N) immediate (range N).
 ;; Valid form options: map-form map-string after-cycle
-;; Form may also be (form-cycle-include . PATTERN)
+;; Form may also be (include . PATTERN)
 ;; If no forms are given, then the context is deleted.
 \n")
     (insert ";; Pattern\n\n")
@@ -651,12 +657,12 @@
 
 (defun form-cycle-find-context (pattern)
   (find pattern 
-        form-cycle-lisp-forms
+        form-cycle-lisp-patterns
         :key #'form-cycle-context-pattern
         :test #'equal))
 
 (defun form-cycle-context-position (pattern)
-  (position pattern form-cycle-lisp-forms
+  (position pattern form-cycle-lisp-patterns
             :key #'form-cycle-context-pattern
             :test #'equal))
 
@@ -666,8 +672,8 @@
 (defun form-cycle-delete-context (pattern)
   (if (form-cycle-find-context pattern)
       (progn
-        (setf form-cycle-lisp-forms
-              (cl-delete pattern form-cycle-lisp-forms
+        (setf form-cycle-lisp-patterns
+              (cl-delete pattern form-cycle-lisp-patterns
                          :key #'form-cycle-context-pattern
                          :test #'equal))
         t)
@@ -693,7 +699,7 @@
 (defun form-cycle-replace-context (pattern forms &optional options)
   (let ((pos (form-cycle-context-position pattern)))
     (if pos
-        (setf (nth pos form-cycle-lisp-forms)
+        (setf (nth pos form-cycle-lisp-patterns)
               (form-cycle-make-context pattern forms options))
       nil)))
 
@@ -708,7 +714,7 @@
                (read-file-name "Save to: " 
                                nil nil nil "form-cycle-patterns.el"))))
     (with-temp-buffer
-      (dolist (context (reverse form-cycle-lisp-forms))
+      (dolist (context (reverse form-cycle-lisp-patterns))
         (newline)
         (form-cycle-with-context (pat opt forms) context
           (insert
@@ -722,3 +728,9 @@
                (read-file-name "Load patterns from: " 
                                nil nil nil "form-cycle-patterns.el"))))
     (load-file file)))
+
+(defun form-cycle-clear ()
+  (interactive)
+  (setf form-cycle-lisp-patterns nil)
+  (message "Cleared patterns."))
+  

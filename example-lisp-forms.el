@@ -1,4 +1,4 @@
-(setf form-cycle-lisp-forms nil)
+(setf form-cycle-lisp-patterns nil)
 
 ;; Any context
 (form-cycle-define-pattern ((*)) ()
@@ -36,7 +36,7 @@
   "(:default-initargs@)"
   "(:documentation \"@\")")
 
-(form-cycle-define-pattern (defclass nil) ()
+(form-cycle-define-pattern (defclass (*)) ()
   "(%_ :initarg :_ :initform nil)"
   "(%_ :initarg :_ :accessor _ :initform nil)"
   ("(%_ :initarg :_
@@ -84,9 +84,9 @@
 ;; Various
 
 (form-cycle-define-pattern (defgeneric) (immediate)
-  "(:generic-function-class@)"
   "(:method (@)
     )"
+  "(:generic-function-class@)"
   "(:documentation \"@\")")
 
 (form-cycle-define-pattern (format) (immediate)
@@ -94,12 +94,12 @@
   "\"~A~%\""
   "\"~{~A~^, ~}~%\""
   "\"~{~S~^, ~}~%\""
-  (form-cycle-include (*)))
+  (include (*)))
 
 (form-cycle-define-pattern (assert) (immediate)
   "(null @_)"
   "(not (null @_))"
-  (form-cycle-include (*)))
+  (include (*)))
 
 (form-cycle-define-pattern (asdf:defsystem) ()
   "(:file \"_\")"
@@ -115,7 +115,7 @@
 
 (form-cycle-define-pattern (loop) ()
   "(tricky-loop-clause)"
-  (form-cycle-include (*)))
+  (include (*)))
 
 (form-cycle-define-pattern (loop tricky-loop-clause) (up-list)
   "(for-as-hash @)"
