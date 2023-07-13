@@ -403,6 +403,7 @@
     (check-type thing symbol)))
 
 ;; Accessors
+
 (defun form-cycle-make-context (pattern forms &optional options)
   (check-type pattern (or symbol list))
   (check-type forms list)
@@ -490,6 +491,28 @@
        (nthcdr 2 forms)
        (nth 1 forms)))))
 
+(defmacro form-cycle-with-context (bindings context &rest rest)
+  "(form-cycle-with-context (pattern options forms) CONTEXT &rest REST)"
+  (destructuring-bind (pattern options forms) bindings
+    (let ((c (gensym)))
+      `(let* ((,c ,context)
+              (,pattern (form-cycle-context-pattern ,c))
+              (,options (form-cycle-context-pattern-options ,c))
+              (,forms (form-cycle-context-forms ,c)))
+         ,@rest))))
+
+(defmacro form-cycle-with-form (bindings form &rest rest)
+  (destructuring-bind (string options) bindings
+    (let ((f (gensym)))
+      `(let* ((,f ,form)
+              (,string (form-cycle-context-form-string ,f))
+              (,options (form-cycle-context-form-options ,f)))
+         ,@rest))))
+
+(put 'form-cycle-with-context 'lisp-indent-function 2)
+(put 'form-cycle-with-form 'lisp-indent-function 2)
+
+
 ;; Manipulation
 
 (defmacro form-cycle-define-pattern (pattern options &rest forms)
@@ -553,7 +576,8 @@
      (or exist (form-cycle-make-context pattern nil nil)))))
 
 (define-minor-mode form-cycle-edit-mode "" nil " Form-Cycle-Edit"
-  '(("\C-c\C-k" . form-cycle-edit-save))
+  '(("\C-c\C-c" . form-cycle-edit-save)
+    ("\C-c\C-s" . form-cycle-save)) 
   (when form-cycle-edit-mode
     t))
 
@@ -587,9 +611,9 @@
     (emacs-lisp-mode)
     (form-cycle-edit-mode 1)
     (delete-region 1 (buffer-end 1))
-    (insert ";; Press C-c C-k to update this context.
+    (insert ";; Press C-c C-c to update this context.
 ;; Press C-c C-s to write all patterns to a file.
-;; Valid pattern options: up-list immediate (range N)
+;; Valid pattern options: up-list toplevel (depth N) immediate (range N).
 ;; Valid form options: map-form map-string after-cycle
 ;; Form may also be (form-cycle-include . PATTERN)
 ;; If no forms are given, then the context is deleted.
@@ -684,7 +708,12 @@
                (read-file-name "Save to: " 
                                nil nil nil "form-cycle-patterns.el"))))
     (with-temp-buffer
-      (insert (pp-to-string `(setq form-cycle-lisp-forms ',form-cycle-lisp-forms)))
+      (dolist (context (reverse form-cycle-lisp-forms))
+        (newline)
+        (form-cycle-with-context (pat opt forms) context
+          (insert
+           (pp-to-string
+            `(form-cycle-define-pattern ,pat ,opt ,@forms)))))
       (write-file file nil))))
 
 (defun form-cycle-load ()
