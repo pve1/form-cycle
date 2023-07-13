@@ -233,8 +233,20 @@
       (save-excursion 
         (beginning-of-defun)
         (down-list)
+        (forward-sexp 1)
         (forward-sexp n)
         (symbol-name (symbol-at-point)))
+    (error nil)))
+
+(defun form-cycle-read-nth-toplevel-form (n)
+  (condition-case nil
+      (save-excursion 
+        (beginning-of-defun)
+        (down-list)
+        (forward-sexp 1)
+        (forward-sexp n)
+        (backward-sexp)
+        (read (current-buffer)))
     (error nil)))
 
 (defun form-cycle-toplevel-form-name ()

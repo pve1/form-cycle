@@ -86,6 +86,15 @@
 (form-cycle-define-pattern (defgeneric) (immediate)
   "(:method (@)
     )"
+  ("(:method %%%@
+    )" (map-form (lambda (form)
+                   (let ((defgeneric-args (form-cycle-read-nth-toplevel-form 2)))
+                     (replace-regexp-in-string "%%%" 
+                                               (prin1-to-string
+                                                (mapcar (lambda (x)
+                                                          (list x t)) 
+                                                        defgeneric-args))
+                                               form)))))
   "(:generic-function-class@)"
   "(:documentation \"@\")")
 
