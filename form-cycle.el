@@ -1,6 +1,6 @@
 ;; -*- lexical-binding: t -*-
 
-(require 'cl)
+(require 'cl-lib)
 (require 'ido)
 
 (defvar form-cycle-current-cycle-state nil)
@@ -25,7 +25,7 @@
   (lambda ()
     (when form-cycle-initial-position
       (goto-char form-cycle-initial-position))
-    (delete-forward-char length)
+    (delete-char length)
     (setf form-cycle-undo-previous-function nil)))
 
 (defun form-cycle-default-cycle-function (form)
@@ -36,7 +36,7 @@
               (goto-char form-cycle-initial-position))
             (form-cycle-debug form form-cycle-undo-previous-function)
             (form-cycle-debug (length form) form-cycle-undo-previous-function)
-            (delete-forward-char (length form))
+            (delete-char (length form))
             (setf form-cycle-undo-previous-function nil))))
   (insert form)
   form)
@@ -57,20 +57,6 @@
   (throw 'form-cycle-skip 'form-cycle-skip)) 
 
 (defvar form-cycle-skip nil)
-
-(defun form-cycle-next ()
-  (let ((skip-count 0))
-    (cl-tagbody
-     again  
-     (form-cycle-debug form-cycle-current-cycle-state)
-     (let ((next (pop form-cycle-current-cycle-state)))
-       (when next
-         (setf form-cycle-current-cycle-state
-               (append form-cycle-current-cycle-state (list next)))
-         (when form-cycle-undo-previous-function
-           (funcall form-cycle-undo-previous-function))
-         (funcall form-cycle-function next)
-         (setf form-cycle-position (point)))))))
 
 (defun form-cycle-new-cycle-p ()
   (or (null form-cycle-position)
@@ -116,7 +102,7 @@
 
 (defun form-cycle-beginning-of-symbol-maybe ()
   (when (form-cycle-symbol-at-point)
-    (beginning-of-sexp)))
+    (thing-at-point--beginning-of-sexp)))
 
 ;; Point should be at the beginning of the form that was previously
 ;; inserted.
@@ -134,7 +120,7 @@
       (cond ((and sym
                   (string-match "^\\_<" (symbol-name sym)))
              (unless (looking-at "\\_<")
-               (beginning-of-sexp))
+               (thing-at-point--beginning-of-sexp))
              (kill-sexp)
              (setf form-cycle-current-name (symbol-name sym)
                    form-cycle-initial-position (point)))
@@ -174,7 +160,7 @@
     ;; Build string
     (with-temp-buffer 
       (insert form-string)
-      (beginning-of-buffer)
+      (goto-char (point-min))
       ;; _ -> name
       (if (equal form-cycle-current-name "")
           ;; If no name was given, ignore @ and place point at _
@@ -189,10 +175,10 @@
             ;; Delete the other @'s
             (save-excursion (replace-string form-cycle-point-marker "")))
         (replace-string form-cycle-name-marker form-cycle-current-name))
-      (beginning-of-buffer)
+      (goto-char (point-min))
       ;; Figure out where to place point
       (when (search-forward form-cycle-point-marker nil t)
-        (delete-backward-char (length form-cycle-point-marker))
+        (delete-char (- (length form-cycle-point-marker)))
         (setf place-point (1- (point))))
       (setf string (buffer-substring-no-properties 1 (buffer-end 1))))
     (form-cycle-debug string form-cycle-with-name)
@@ -241,7 +227,7 @@
 (defun form-cycle-%%%-to-subseq-of-current-name (form length)
   (if (< (length form-cycle-current-name) length)
       form
-    (let ((prefix (subseq form-cycle-current-name 0 length)))
+    (let ((prefix (cl-subseq form-cycle-current-name 0 length)))
       (replace-regexp-in-string "%%%" prefix form))))
 
 (defun form-cycle-%%%-to-first-char-of-current-name (form)
@@ -354,8 +340,8 @@
           if (and (consp form) ; (include foo)
                   (eq (first form) 'include))
           do (let ((pat (rest form)))
-               (unless (or (find pat already-included :test #'equal)
-                           (find pat patterns-included :test #'equal))                 
+               (unless (or (cl-find pat already-included :test #'equal)
+                           (cl-find pat patterns-included :test #'equal))                 
                  (loop for form2 in (form-cycle-context-forms
                                      (form-cycle-find-context pat))
                        do (push form2 complete-context))
@@ -425,12 +411,12 @@
                                  mangled))
                              (mapcar 'form-cycle-context-form-string
                                      (form-cycle-context-forms context)))))
-            (form (find (cdr (find choice mangled-original-pairs 
-                                   :test #'equal
-                                   :key #'car))
-                        (form-cycle-context-forms context)
-                        :test #'equal
-                        :key #'form-cycle-context-form-string)))
+            (form (cl-find (cdr (cl-find choice mangled-original-pairs 
+                                         :test #'equal
+                                         :key #'car))
+                           (form-cycle-context-forms context)
+                           :test #'equal
+                           :key #'form-cycle-context-form-string)))
        (form-cycle-initiate (list form))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -524,26 +510,20 @@
 
 (defun form-cycle-read-context-from-buffer ()
   (let (forms)
-    (loop for form = (condition-case err
+    (loop for form = (condition-case nil
                          (read (current-buffer))
                        (end-of-file (return)))
           do (push form forms))
     (setf forms (nreverse forms))
-    (let ((pat (if (consp (first forms))
-                   (caar forms)
-                 (first forms)))
-          (options (if (consp (first forms))
-                       (rest (first forms)) 
-                     nil)))
-      (form-cycle-make-context 
-       (nth 0 forms)
-       (nthcdr 2 forms)
-       (nth 1 forms)))))
+    (form-cycle-make-context 
+     (nth 0 forms)
+     (nthcdr 2 forms)
+     (nth 1 forms))))
 
 (defmacro form-cycle-with-context (bindings context &rest rest)
   "(form-cycle-with-context (pattern options forms) CONTEXT &rest REST)"
   (destructuring-bind (pattern options forms) bindings
-    (let ((c (gensym)))
+    (let ((c (cl-gensym)))
       `(let* ((,c ,context)
               (,pattern (form-cycle-context-pattern ,c))
               (,options (form-cycle-context-pattern-options ,c))
@@ -552,7 +532,7 @@
 
 (defmacro form-cycle-with-form (bindings form &rest rest)
   (destructuring-bind (string options) bindings
-    (let ((f (gensym)))
+    (let ((f (cl-gensym)))
       `(let* ((,f ,form)
               (,string (form-cycle-context-form-string ,f))
               (,options (form-cycle-context-form-options ,f)))
@@ -633,7 +613,7 @@
 (defun form-cycle-edit-save ()
   (interactive)
   (save-excursion
-    (beginning-of-buffer)
+    (goto-char (point-min))
     (let* ((context (form-cycle-read-context-from-buffer))
            (exist (form-cycle-find-context 
                    (form-cycle-context-pattern context))))
@@ -699,15 +679,15 @@
     (message "Moved to front.")))
 
 (defun form-cycle-find-context (pattern)
-  (find pattern 
-        form-cycle-lisp-patterns
-        :key #'form-cycle-context-pattern
-        :test #'equal))
+  (cl-find pattern 
+           form-cycle-lisp-patterns
+           :key #'form-cycle-context-pattern
+           :test #'equal))
 
 (defun form-cycle-context-position (pattern)
-  (position pattern form-cycle-lisp-patterns
-            :key #'form-cycle-context-pattern
-            :test #'equal))
+  (cl-position pattern form-cycle-lisp-patterns
+               :key #'form-cycle-context-pattern
+               :test #'equal))
 
 (defun form-cycle-find-context-semi-interactively (pattern)
   (message "%s" (prin1-to-string (form-cycle-find-context pattern))))
