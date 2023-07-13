@@ -1,5 +1,8 @@
 ;; -*- lexical-binding: t -*-
 
+(require 'cl)
+(require 'ido)
+
 (defvar form-cycle-current-cycle-state nil)
 (defvar form-cycle-position nil)
 (defvar form-cycle-initial-position nil)

@@ -57,6 +57,10 @@
   "#:_"
   "(option)")
 
+(form-cycle-define-pattern (defpackage (*)) ()
+  ("\"_\"" (map-string upcase))
+  "#:_")
+
 (form-cycle-define-pattern (defpackage option) (up-list)
   ("(:use @)
   (option)")
