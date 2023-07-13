@@ -82,8 +82,7 @@
   "#:_"
   ("(#:%%% #:_)" (map-form form-cycle-%%%-to-first-char-of-current-name))
   ("(#:%%% #:_)" (map-form form-cycle-%%%-to-first-two-chars-of-current-name))
-  ("(#:%%% #:_)" (map-form (lambda (form)
-                             (form-cycle-%%%-to-subseq-of-current-name form 3)))))
+  ("(#:%%% #:_)" (map-form form-cycle-%%%-to-subseq-of-current-name 3)))
 
 ;; Various
 
@@ -103,11 +102,14 @@
   "(:documentation \"@\")")
 
 (form-cycle-define-pattern (format) (immediate)
-  "\"~S~%\""
-  "\"~A~%\""
-  "\"~{~A~^, ~}~%\""
-  "\"~{~S~^, ~}~%\""
+  ("(format-recipe)" (map-form form-cycle-require-position = 2))
   (include (*)))
+
+(form-cycle-define-pattern (format-recipe) (immediate up-list)
+  "\"~S~%\"" 
+  "\"~A~%\"" 
+  "\"~{~A~^, ~}~%\""
+  "\"~{~S~^, ~}~%\"")
 
 (form-cycle-define-pattern (assert) (immediate)
   "(null @_)"

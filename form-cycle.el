@@ -52,6 +52,7 @@
       (funcall form-cycle-function next) 
       (setf form-cycle-position (point)))))
 
+;; Do not call this inside save-excursion, it won't work.
 (defun form-cycle-skip ()
   (setf form-cycle-position (point))
   (throw 'form-cycle-skip 'form-cycle-skip)) 
@@ -150,12 +151,17 @@
                         form-string-designator))
          (getopt (lambda (opt)
                    (second (form-cycle-context-form-assoc form opt))))
+         (getargs (lambda (opt)
+                    (nthcdr 2 (form-cycle-context-form-assoc form opt))))
          (string))
 
     (when (form-cycle-context-form-assoc form 'map-form)
       (save-excursion
         (setf form-string
-              (funcall (funcall getopt 'map-form) form-string))))
+              ;; (funcall (funcall getopt 'map-form) form-string)
+              (apply (funcall getopt 'map-form) 
+                     form-string
+                     (funcall getargs 'map-form)))))
 
     ;; Build string
     (with-temp-buffer 
@@ -184,8 +190,12 @@
     (form-cycle-debug string form-cycle-with-name)
     (when (funcall getopt 'map-string)
       (save-excursion
-        (setf string (funcall (funcall getopt 'map-string) string))))
+        (setf string (apply (funcall getopt 'map-string)
+                            string
+                            (funcall getargs 'map-string)))))
+
     (form-cycle-default-cycle-function string)
+
     (when place-point
       (goto-char form-cycle-initial-position)
       (forward-char place-point)
@@ -240,6 +250,16 @@
   (replace-regexp-in-string "%%%" 
                             (form-cycle-toplevel-form-name)
                             form))
+
+(defun form-cycle-require-position (form fn n)
+  (let ((count 0))
+    (save-excursion 
+      (ignore-errors
+        (loop (backward-sexp) 
+              (incf count))))
+    (unless (funcall fn count n)
+      (form-cycle-skip))
+    form))
 
 (defun form-cycle-indent-defun ()
   (beginning-of-defun)
