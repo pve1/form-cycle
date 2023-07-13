@@ -49,21 +49,49 @@
       (funcall form-cycle-function next) 
       (setf form-cycle-position (point)))))
 
+(defun form-cycle-skip ()
+  (setf form-cycle-position (point))
+  (throw 'form-cycle-skip 'form-cycle-skip)) 
+
+(defvar form-cycle-skip nil)
+
+(defun form-cycle-next ()
+  (let ((skip-count 0))
+    (cl-tagbody
+     again  
+     (form-cycle-debug form-cycle-current-cycle-state)
+     (let ((next (pop form-cycle-current-cycle-state)))
+       (when next
+         (setf form-cycle-current-cycle-state
+               (append form-cycle-current-cycle-state (list next)))
+         (when form-cycle-undo-previous-function
+           (funcall form-cycle-undo-previous-function))
+         (funcall form-cycle-function next)
+         (setf form-cycle-position (point)))))))
+
 (defun form-cycle-new-cycle-p ()
   (or (null form-cycle-position)
       (and form-cycle-position
            (not (= form-cycle-position (point)))))) ; Point has moved
 
 (defun form-cycle-initiate (cycle)
-  (if (form-cycle-new-cycle-p)
-      (let ((form-cycle-new-cycle-p t)) 
-        (form-cycle-debug "New Cycle.")
-        (setq form-cycle-current-cycle-state cycle
-              form-cycle-undo-previous-function nil
-              form-cycle-initial-position (point))
-        (form-cycle-next))
-    (form-cycle-next)))
-
+  (let ((skip-count 0))
+    (cl-tagbody
+     again  
+     (when (eq 'form-cycle-skip
+               (catch 'form-cycle-skip 
+                 (if (form-cycle-new-cycle-p)
+                     (let ((form-cycle-new-cycle-p t)) 
+                       (form-cycle-debug "New Cycle.")
+                       (setq form-cycle-current-cycle-state cycle
+                             form-cycle-undo-previous-function nil
+                             form-cycle-initial-position (point))
+                       (form-cycle-next))
+                   (form-cycle-next))))
+       (when (< skip-count (length form-cycle-current-cycle-state))
+         (incf skip-count)
+         (go again))))))
+   
 (defun form-cycle-test ()
   (interactive)
   (form-cycle-initiate '("abc" "foo" "bar")))

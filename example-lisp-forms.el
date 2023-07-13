@@ -2,9 +2,9 @@
 
 ;; Any context
 (form-cycle-define-pattern ((*)) ()
-  "(let ((_@)))" 
   "#'_"
   "(setf _@)"
+  "(let ((_@)))"
   "(lambda (_)@)"
   "(make-instance '_@)"
   "(declare (ignore _))"
@@ -17,8 +17,8 @@
 
 ;; Toplevel
 (form-cycle-define-pattern () (toplevel)
-  "(defun _ (@))"
-  "(defmethod _ (@))"
+  "(defun _ (@))" 
+  "(defmethod _ (@))" 
   "(defgeneric _ (@))"
   "(defclass _ ()\n  (@))"
   "(defvar _@)"
@@ -74,12 +74,12 @@
   (option)"))
 
 (form-cycle-define-pattern (defpackage :local-nicknames) ()
+  ("\"_\"" (map-string upcase))
+  "#:_"
   ("(#:%%% #:_)" (map-form form-cycle-%%%-to-first-char-of-current-name))
   ("(#:%%% #:_)" (map-form form-cycle-%%%-to-first-two-chars-of-current-name))
   ("(#:%%% #:_)" (map-form (lambda (form)
-                             (form-cycle-%%%-to-subseq-of-current-name form 3))))
-  ("\"_\"" (map-string upcase))
-  "#:_")
+                             (form-cycle-%%%-to-subseq-of-current-name form 3)))))
 
 ;; Various
 
