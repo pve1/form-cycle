@@ -165,8 +165,8 @@
 
 (form-cycle-define-pattern (loop for-as-on-list) (up-list)
   (":for tail :on _@ :by #'cdr
-:for head = (car tail)" (after-cycle form-cycle-indent-defun))
-
+:for head = (car tail)" 
+   (after-cycle form-cycle-indent-defun))
   ":for (a b) :on _@ :by #'cddr")
 
 (form-cycle-define-pattern (loop for-as-equals-then) (up-list)
