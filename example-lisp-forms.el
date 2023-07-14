@@ -53,9 +53,9 @@
 
 ;; Defpackage
 (form-cycle-define-pattern (defpackage) ()
+  ("(option)" (map-form form-cycle-require-position >= 2))
   ("\"_\"" (map-string upcase))
-  "#:_"
-  "(option)")
+  "#:_")
 
 (form-cycle-define-pattern (defpackage (*)) ()
   ("\"_\"" (map-string upcase))
@@ -115,6 +115,10 @@
   "(null @_)"
   "(not (null @_))"
   (include (*)))
+
+(form-cycle-define-pattern (make-hash-table) (immediate up-list)
+  "(make-hash-table :test 'eq)"
+  "(make-hash-table :test 'equal)")
 
 (form-cycle-define-pattern (asdf:defsystem) ()
   "(:file \"_\")"
