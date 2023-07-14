@@ -144,6 +144,7 @@
   "(for-as-hash@)"
   "(for-as-package@)"
   "(for-as-on-list@)"
+  "(for-as-equals-then@)"
   "(for-as-arithmetic@)")
 
 (form-cycle-define-pattern (loop for-as-package) (up-list)
@@ -167,6 +168,16 @@
 :for head = (car tail)" (after-cycle form-cycle-indent-defun))
 
   ":for (a b) :on _@ :by #'cddr")
+
+(form-cycle-define-pattern (loop for-as-equals-then) (up-list)
+  (":for line = (read-line _ nil _)
+:until (eql line _)" (after-cycle form-cycle-indent-defun))
+  (":for form = (read _ nil _)
+:until (eql form _)" (after-cycle form-cycle-indent-defun)))
+
+
+
+
 
 
 
