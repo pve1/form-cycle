@@ -2,7 +2,10 @@
 
 ;; Any context
 (form-cycle-define-pattern ((*)) ()
-  "#'_"
+  ("#'_" (map-form (lambda (f)
+                     (if (equal "" form-cycle-current-name) 
+                         (form-cycle-skip)
+                       f))))
   "(setf _@)"
   "(let ((_@)))"
   "(lambda (_)@)"
@@ -40,7 +43,7 @@
   "(:default-initargs@)"
   "(:documentation \"@\")")
 
-(form-cycle-define-pattern (defclass (*)) ()
+(form-cycle-define-pattern (defclass nil) ()
   "(%_ :initarg :_ :initform nil)"
   "(%_ :initarg :_ :accessor _ :initform nil)"
   ("(%_ :initarg :_
@@ -141,11 +144,11 @@
   (include (*)))
 
 (form-cycle-define-pattern (loop tricky-loop-clause) (up-list)
-  "(for-as-hash@)"
-  "(for-as-package@)"
-  "(for-as-on-list@)"
-  "(for-as-equals-then@)"
-  "(for-as-arithmetic@)")
+  "(for-as-hash  @)"
+  "(for-as-package  @)"
+  "(for-as-on-list  @)"
+  "(for-as-equals-then  @)"
+  "(for-as-arithmetic  @")
 
 (form-cycle-define-pattern (loop for-as-package) (up-list)
   ":for sym :being :each :symbol :in _"   
