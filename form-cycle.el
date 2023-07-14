@@ -127,7 +127,7 @@
                    form-cycle-initial-position (point)))
 
             ((and (not sym)
-                  (looking-at "(\\|\""))
+                  (looking-at "(\\|\"\\|'"))
              (kill-sexp)
              (setf form-cycle-current-name (substring-no-properties
                                             (current-kill 0))

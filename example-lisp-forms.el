@@ -25,6 +25,10 @@
   "(defparameter _@)"
   ("(defmethod initialize-instance :after ((%%% _) &key)@)"
    (map-form form-cycle-%%%-to-first-char-of-current-name))
+  ("(defmethod print-object ((%%% _) stream)
+  (print-unreadable-object (%%% stream :type t)
+    (format stream @)))"
+   (map-form form-cycle-%%%-to-first-char-of-current-name))
   "(defpackage #:_
   (:use #:cl)
   (:local-nicknames)
@@ -137,8 +141,10 @@
   (include (*)))
 
 (form-cycle-define-pattern (loop tricky-loop-clause) (up-list)
-  "(for-as-hash @)"
-  "(for-as-package @)")
+  "(for-as-hash@)"
+  "(for-as-package@)"
+  "(for-as-on-list@)"
+  "(for-as-arithmetic@)")
 
 (form-cycle-define-pattern (loop for-as-package) (up-list)
   ":for sym :being :each :symbol :in _"   
@@ -149,6 +155,18 @@
   ":for key :being :each :hash-key :using (:hash-value val) :in _"
   ":for val :being :each :hash-value :using (:hash-key key) :in _")
 
+(form-cycle-define-pattern (loop for-as-arithmetic) (up-list)
+  ":for k :from 0 :by 1"   
+  ":for k :from 0 :to _@ :by 1" 
+  ":for k :from 0 :below _@ :by 1"
+  ":for k :from _@ :downto 0 :by 1"
+  ":for k :from _@ :above 0 :by 1")
+
+(form-cycle-define-pattern (loop for-as-on-list) (up-list)
+  (":for tail :on _@ :by #'cdr
+:for head = (car tail)" (after-cycle form-cycle-indent-defun))
+
+  ":for (a b) :on _@ :by #'cddr")
 
 
 
