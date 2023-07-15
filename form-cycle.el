@@ -423,7 +423,7 @@
 
     ;; Recurse if an include directive was found.
     (if patterns-included
-        (form-cycle-process-includes
+        (form-cycle-process-includes-2
          (form-cycle-make-fc 
           (form-cycle-fc-pattern fc)
           (nreverse complete-forms)
