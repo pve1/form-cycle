@@ -400,39 +400,41 @@
                     pat current-context range max-depth current-symbol-name)
               collect c)))))
 
-(defvar form-cycle-process-includes-list nil)
+(defvar form-cycle-process-includes-list 'nothing)
 
 (defun form-cycle-process-includes (fc known-fcs)
   (let ((form-cycle-process-includes-list nil))
-    (form-cycle-process-includes-2 fc known-fcs nil)))
+    (form-cycle-process-includes-2 fc known-fcs)))
 
-(defun form-cycle-process-includes-2 (fc known-fcs &optional already-included)
+(defun form-cycle-process-includes-2 (fc known-fcs)
   (let (complete-forms
-        patterns-included)
+        patterns-included-p)
     (loop for form in (form-cycle-fc-forms fc)
           if (and (consp form) ; (include foo)
                   (eq (first form) 'include))
           do (let ((pat (rest form)))
-               (unless (or (cl-find pat already-included :test #'equal)
-                           (cl-find pat patterns-included :test #'equal))                 
+               (unless (cl-find pat form-cycle-process-includes-list
+                                :test #'equal)
                  (loop for form2 in (form-cycle-fc-forms
                                      (form-cycle-find-fc pat))
                        do (push form2 complete-forms))
-                 (push pat patterns-included)))
+                 (push pat form-cycle-process-includes-list)
+                 (setf patterns-included-p t)))
           else do (push form complete-forms))
 
+    (setf complete-forms (nreverse complete-forms))
+
     ;; Recurse if an include directive was found.
-    (if patterns-included
+    (if patterns-included-p
         (form-cycle-process-includes-2
          (form-cycle-make-fc 
           (form-cycle-fc-pattern fc)
-          (nreverse complete-forms)
+          complete-forms
           (form-cycle-fc-pattern-options fc))
-         known-fcs
-         (append patterns-included already-included))
+         known-fcs)
       (form-cycle-make-fc 
        (form-cycle-fc-pattern fc)
-       (nreverse complete-forms)
+       complete-forms
        (form-cycle-fc-pattern-options fc)))))
 
 (defun form-cycle-lisp-patterns (&optional lisp-forms initiate-fn)
