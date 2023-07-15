@@ -641,16 +641,13 @@
 
 (defun form-cycle-edit ()
   (interactive)
-  (let* ((context (form-cycle-gather-context))
+  (let* ((context (form-cycle-gather-context t))
          (pattern (read-from-minibuffer "Context: "
                                         (with-output-to-string
-                                          (princ context))
+                                          (prin1 context))
                                         nil 
                                         t))
          (exist (form-cycle-find-context pattern)))
-    ;; (unless exist
-    ;;   (form-cycle-add-context pattern nil nil)
-    ;;   (setf exist (form-cycle-find-context pattern)))
     (form-cycle-open-context-edit-buffer 
      (or exist (form-cycle-make-context pattern nil nil)))))
 
@@ -712,10 +709,10 @@
 
 (defun form-cycle-move-to-front ()
   (interactive)
-  (let* ((context (form-cycle-gather-context))
+  (let* ((context (form-cycle-gather-context t))
          (pattern (read-from-minibuffer "Context: "
                                         (with-output-to-string
-                                          (princ context))
+                                          (prin1 context))
                                         nil 
                                         t))
          (exist (form-cycle-find-context pattern)))
@@ -767,10 +764,10 @@
 
 (defun form-cycle-delete ()
   (interactive)
-  (let* ((context (form-cycle-gather-context))
+  (let* ((context (form-cycle-gather-context t))
          (pattern (read-from-minibuffer "Context: "
                                         (with-output-to-string
-                                          (princ context))
+                                          (prin1 context))
                                         nil 
                                         t)))
     (form-cycle-delete-context-semi-interactively pattern)))
