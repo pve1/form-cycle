@@ -319,16 +319,29 @@
            do (up-list -1)))))
 
 (defun form-cycle-match-context-pattern (pattern current-context 
-                                                 &optional allowed-range max-depth)
+                                                 &optional 
+                                                 allowed-range 
+                                                 max-depth
+                                                 current-symbol-name)
   (block done
     (when (and max-depth (< max-depth (length current-context)))
       (return-from done nil))
+
+    (let ((last (car (last pattern))))
+      (when (stringp last) ; Match against current symbol.
+        (if (equal last current-symbol-name)
+            (setf pattern (butlast pattern)) ; ok 
+          (return-from done nil))))
+
     (when (and (null pattern)
                (null current-context))
       (return-from done t))
+
     (unless (listp pattern)
       (error "Bad pattern."))
+
     (form-cycle-debug allowed-range)
+
     (loop with pattern-rest = (reverse pattern)
           for range from 0
           for pattern-head = (car pattern-rest)
@@ -345,12 +358,17 @@
 (defun form-cycle-determine-matching-contexts (known-contexts)
   (save-excursion
     (block done 
-      (let* ((current-context (form-cycle-gather-context)))
+      (let* ((current-context (form-cycle-gather-context))
+             (current-symbol (symbol-at-point))
+             (current-symbol-name 
+              (when current-symbol
+                (symbol-name current-symbol)))) 
         (loop for c in known-contexts
               for pat = (form-cycle-context-pattern c)
               for range = (form-cycle-context-match-range c)
               for max-depth = (form-cycle-context-max-depth c)              
-              when (form-cycle-match-context-pattern pat current-context range max-depth)
+              when (form-cycle-match-context-pattern 
+                    pat current-context range max-depth current-symbol-name)
               collect c)))))
 
 (defun form-cycle-process-includes (context known-contexts &optional already-included)
@@ -460,7 +478,9 @@
 ;; Accessors
 
 (defun form-cycle-make-context (pattern forms &optional options)
-  (check-type pattern (or symbol list))
+  (check-type pattern (or symbol list string))  
+  (unless (listp pattern)
+    (setf pattern (list pattern)))
   (check-type forms list)
   (dolist (opt options)
     (form-cycle-check-option opt))
@@ -570,6 +590,8 @@
 (put 'form-cycle-define-pattern 'lisp-indent-function 2)
 
 (defun form-cycle-add-context (pattern forms &optional options)
+  (unless (listp pattern)
+    (setf pattern (list pattern)))
   (if (form-cycle-find-context pattern)
       (form-cycle-replace-context pattern forms options)
     (pushnew (form-cycle-make-context pattern forms options)
@@ -699,12 +721,16 @@
     (message "Moved to front.")))
 
 (defun form-cycle-find-context (pattern)
+  (unless (listp pattern)
+    (setf pattern (list pattern)))
   (cl-find pattern 
            form-cycle-lisp-patterns
            :key #'form-cycle-context-pattern
            :test #'equal))
 
 (defun form-cycle-context-position (pattern)
+  (unless (listp pattern)
+    (setf pattern (list pattern)))
   (cl-position pattern form-cycle-lisp-patterns
                :key #'form-cycle-context-pattern
                :test #'equal))
@@ -713,6 +739,8 @@
   (message "%s" (prin1-to-string (form-cycle-find-context pattern))))
 
 (defun form-cycle-delete-context (pattern)
+  (unless (listp pattern)
+    (setf pattern (list pattern)))
   (if (form-cycle-find-context pattern)
       (progn
         (setf form-cycle-lisp-patterns
