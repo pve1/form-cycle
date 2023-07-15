@@ -88,6 +88,27 @@
 
 ;; Adding names and place point.
 
+;; Terminology:
+
+;; - context: The list of cars from each nested list leading up to
+;;   the point. I.e. for (foo (bar (xyz <point>))) we have the
+;;   context (foo bar xyz)
+;; 
+;; - pattern: A list of symbols that may match some contexts. For
+;;   example, the pattern (a b) would match the
+;;   context (a (xx (b (yy <point>)))). A pattern matches as long as
+;;   its elements are found in the context in the same order.
+;; 
+;; - form: A string that may be inserted into the buffer as a result
+;;   of a pattern matching.
+;; 
+;; - form cycle: A pattern paired with a list of forms, where each
+;;   form in the list is suggested to the user, one by one, if the
+;;   pattern matched. 
+;; 
+;;   In function names, the abbreviation "fc" is used to indicate a
+;;   form cycle data structure, (e.g. form-cycle-make-fc).
+
 (defvar form-cycle-current-name nil)
 (defvar form-cycle-name-marker "_")
 (defvar form-cycle-point-marker "@")
@@ -379,7 +400,13 @@
                     pat current-context range max-depth current-symbol-name)
               collect c)))))
 
-(defun form-cycle-process-includes (context known-contexts &optional already-included)
+(defvar form-cycle-process-includes-list nil)
+
+(defun form-cycle-process-includes (context known-contexts)
+  (let ((form-cycle-process-includes-list nil))
+    (%form-cycle-process-includes context known-contexts nil)))
+
+(defun %form-cycle-process-includes (context known-contexts &optional already-included)
   (let (complete-context
         patterns-included)
     (loop for form in (form-cycle-context-forms context)
@@ -485,7 +512,7 @@
 
 ;; Accessors
 
-(defun form-cycle-make-context (pattern forms &optional options)
+(defun form-cycle-make-fc (pattern forms &optional options)
   (check-type pattern (or symbol list string))  
   (unless (listp pattern)
     (setf pattern (list pattern)))
@@ -502,113 +529,113 @@
         (list* 'options options)
         (list* 'forms forms)))
 
-(defun form-cycle-context-pattern (context)
-  (cdr (assq 'pattern context)))
+(defun form-cycle-fc-pattern (fc)
+  (cdr (assq 'pattern fc)))
 
-(defun form-cycle-context-pattern-options (context)
-  (cdr (assq 'options context)))
+(defun form-cycle-fc-pattern-options (fc)
+  (cdr (assq 'options fc)))
 
 ;; Like assoc but a symbol is considered equal to (foo t)
-(defun form-cycle-context-assoc (context-alist key)
-  (loop for i in context-alist
+(defun form-cycle-fc-assoc (fc-alist key)
+  (loop for i in fc-alist
         do (cond ((and (consp i)
                        (equal (car i) key))
                   (return i))
                  ((equal key i)
                   (return (list i t))))))
 
-(defun form-cycle-context-pattern-assoc (context key)
-  (form-cycle-context-assoc
-   (form-cycle-context-pattern-options context)
+(defun form-cycle-fc-pattern-assoc (fc key)
+  (form-cycle-fc-assoc
+   (form-cycle-fc-pattern-options fc)
    key))
 
-(defun form-cycle-context-forms (context)
-  (cdr (assq 'forms context)))
+(defun form-cycle-fc-forms (fc)
+  (cdr (assq 'forms fc)))
 
-(defun form-cycle-context-match-range (context)
-  (let ((r (form-cycle-context-pattern-assoc context 'range)))
+(defun form-cycle-fc-match-range (fc)
+  (let ((r (form-cycle-fc-pattern-assoc fc 'range)))
     (if r 
         (second r)
-      (if (form-cycle-context-pattern-assoc context 'immediate)
+      (if (form-cycle-fc-pattern-assoc fc 'immediate)
           0
         nil))))  
 
-(defun form-cycle-context-max-depth (context)
-  (let ((r (form-cycle-context-pattern-assoc context 'max-depth)))
+(defun form-cycle-fc-max-depth (fc)
+  (let ((r (form-cycle-fc-pattern-assoc fc 'max-depth)))
     (if r 
         (second r)
-      (if (form-cycle-context-pattern-assoc context 'toplevel)
+      (if (form-cycle-fc-pattern-assoc fc 'toplevel)
           0
         nil)))) 
   
-(defun form-cycle-context-form-options (form)
+(defun form-cycle-fc-form-options (form)
   (if (listp form)
       (rest form)
     nil))
 
-(defun form-cycle-context-form-string (form)
+(defun form-cycle-fc-form-string (form)
   (if (listp form)
       (first form)
     form))
 
-(defun form-cycle-context-form-assoc (form key)
-  (form-cycle-context-assoc
-   (form-cycle-context-form-options form)
+(defun form-cycle-fc-form-assoc (form key)
+  (form-cycle-fc-assoc
+   (form-cycle-fc-form-options form)
    key))
 
-(defun form-cycle-read-context-from-buffer ()
+(defun form-cycle-read-fc-from-buffer ()
   (let (forms)
     (loop for form = (condition-case nil
                          (read (current-buffer))
                        (end-of-file (return)))
           do (push form forms))
     (setf forms (nreverse forms))
-    (form-cycle-make-context 
+    (form-cycle-make-fc 
      (nth 0 forms)
      (nthcdr 2 forms)
      (nth 1 forms))))
 
-(defmacro form-cycle-with-context (bindings context &rest rest)
-  "(form-cycle-with-context (pattern options forms) CONTEXT &rest REST)"
+(defmacro form-cycle-with-fc (bindings fc &rest rest)
+  "(form-cycle-with-fc (pattern options forms) FC &rest REST)"
   (destructuring-bind (pattern options forms) bindings
     (let ((c (cl-gensym)))
-      `(let* ((,c ,context)
-              (,pattern (form-cycle-context-pattern ,c))
-              (,options (form-cycle-context-pattern-options ,c))
-              (,forms (form-cycle-context-forms ,c)))
+      `(let* ((,c ,fc)
+              (,pattern (form-cycle-fc-pattern ,c))
+              (,options (form-cycle-fc-pattern-options ,c))
+              (,forms (form-cycle-fc-forms ,c)))
          ,@rest))))
 
 (defmacro form-cycle-with-form (bindings form &rest rest)
   (destructuring-bind (string options) bindings
     (let ((f (cl-gensym)))
       `(let* ((,f ,form)
-              (,string (form-cycle-context-form-string ,f))
-              (,options (form-cycle-context-form-options ,f)))
+              (,string (form-cycle-fc-form-string ,f))
+              (,options (form-cycle-fc-form-options ,f)))
          ,@rest))))
 
-(put 'form-cycle-with-context 'lisp-indent-function 2)
+(put 'form-cycle-with-fc 'lisp-indent-function 2)
 (put 'form-cycle-with-form 'lisp-indent-function 2)
 
 
 ;; Manipulation
 
 (defmacro form-cycle-define-pattern (pattern options &rest forms)
-  `(form-cycle-add-context ',pattern ',forms ',options))
+  `(form-cycle-add-fc ',pattern ',forms ',options))
 
 (put 'form-cycle-define-pattern 'lisp-indent-function 2)
 
-(defun form-cycle-add-context (pattern forms &optional options)
+(defun form-cycle-add-fc (pattern forms &optional options)
   (unless (listp pattern)
     (setf pattern (list pattern)))
-  (if (form-cycle-find-context pattern)
-      (form-cycle-replace-context pattern forms options)
-    (pushnew (form-cycle-make-context pattern forms options)
+  (if (form-cycle-find-fc pattern)
+      (form-cycle-replace-fc pattern forms options)
+    (pushnew (form-cycle-make-fc pattern forms options)
              form-cycle-lisp-patterns
              :test #'equal
-             :key #'form-cycle-context-pattern)))
+             :key #'form-cycle-fc-pattern)))
 
-(defun form-cycle-add-context-semi-interactively (pattern forms &optional options)
-  (if (form-cycle-add-context pattern forms options)
+(defun form-cycle-add-fc-semi-interactively (pattern forms &optional options)
+  (if (form-cycle-add-fc pattern forms options)
       (progn
         (message "Added.")
         t)
@@ -616,25 +643,25 @@
       (message "Error adding.")
       nil)))
 
-;; Adds a form to the context.
+;; Adds a form to the fc.
 (defun form-cycle-add (b e)
   (interactive "r")
   (let* ((context (form-cycle-gather-context))
-         (pattern (read-from-minibuffer "Context: "
+         (pattern (read-from-minibuffer "Pattern: "
                                         (with-output-to-string
-                                          (princ context))
+                                          (prin1 context))
                                         nil 
                                         t))
-         (exist (form-cycle-find-context pattern)))
+         (exist (form-cycle-find-fc pattern)))
     (if exist
         (progn 
-          (form-cycle-replace-context 
+          (form-cycle-replace-fc 
            pattern
            (append (list (buffer-substring-no-properties b e))
-                   (form-cycle-context-forms exist))
-           (form-cycle-context-pattern-options exist))
+                   (form-cycle-fc-forms exist))
+           (form-cycle-fc-pattern-options exist))
           (message "Added."))
-      (form-cycle-add-context-semi-interactively 
+      (form-cycle-add-fc-semi-interactively 
        pattern 
        (list (buffer-substring-no-properties
               b e))))))
@@ -642,14 +669,14 @@
 (defun form-cycle-edit ()
   (interactive)
   (let* ((context (form-cycle-gather-context t))
-         (pattern (read-from-minibuffer "Context: "
+         (pattern (read-from-minibuffer "Pattern: "
                                         (with-output-to-string
                                           (prin1 context))
                                         nil 
                                         t))
-         (exist (form-cycle-find-context pattern)))
-    (form-cycle-open-context-edit-buffer 
-     (or exist (form-cycle-make-context pattern nil nil)))))
+         (exist (form-cycle-find-fc pattern)))
+    (form-cycle-open-fc-edit-buffer 
+     (or exist (form-cycle-make-fc pattern nil nil)))))
 
 (define-minor-mode form-cycle-edit-mode "" nil " Form-Cycle-Edit"
   '(("\C-c\C-c" . form-cycle-edit-save)
@@ -661,47 +688,47 @@
   (interactive)
   (save-excursion
     (goto-char (point-min))
-    (let* ((context (form-cycle-read-context-from-buffer))
-           (exist (form-cycle-find-context 
-                   (form-cycle-context-pattern context))))
+    (let* ((fc (form-cycle-read-fc-from-buffer))
+           (exist (form-cycle-find-fc 
+                   (form-cycle-fc-pattern fc))))
       (cond ((and exist 
-                  (null (form-cycle-context-forms context)))
-             (form-cycle-delete-context-semi-interactively 
-              (form-cycle-context-pattern context)))
+                  (null (form-cycle-fc-forms fc)))
+             (form-cycle-delete-fc-semi-interactively 
+              (form-cycle-fc-pattern fc)))
             
             (exist
-             (form-cycle-replace-context-semi-interactively
-              (form-cycle-context-pattern context)
-              (form-cycle-context-forms context)
-              (form-cycle-context-pattern-options context)))
+             (form-cycle-replace-fc-semi-interactively
+              (form-cycle-fc-pattern fc)
+              (form-cycle-fc-forms fc)
+              (form-cycle-fc-pattern-options fc)))
 
             ((not exist)
-             (form-cycle-add-context-semi-interactively 
-              (form-cycle-context-pattern context)
-              (form-cycle-context-forms context)
-              (form-cycle-context-pattern-options context)))))))
+             (form-cycle-add-fc-semi-interactively 
+              (form-cycle-fc-pattern fc)
+              (form-cycle-fc-forms fc)
+              (form-cycle-fc-pattern-options fc)))))))
 
-(defun form-cycle-open-context-edit-buffer (context)
+(defun form-cycle-open-fc-edit-buffer (fc)
   (let ((buf (get-buffer-create "*Form cycle edit*")))
     (switch-to-buffer-other-window buf)
     (emacs-lisp-mode)
     (form-cycle-edit-mode 1)
     (delete-region 1 (buffer-end 1))
-    (insert ";; Press C-c C-c to update this context.
+    (insert ";; Press C-c C-c to update this form cycle.
 ;; Press C-c C-s to write all patterns to a file.
 ;; Valid pattern options: up-list toplevel (depth N) immediate (range N).
 ;; Valid form options: map-form map-string after-cycle
 ;; Form may also be (include . PATTERN)
-;; If no forms are given, then the context is deleted.
+;; If no forms are given, then the form cycle is deleted.
 \n")
     (insert ";; Pattern\n\n")
     (insert (prin1-to-string
-             (form-cycle-context-pattern context)))
+             (form-cycle-fc-pattern fc)))
     (insert "\n\n;; Options\n\n")
     (insert (prin1-to-string 
-             (form-cycle-context-pattern-options context)))
+             (form-cycle-fc-pattern-options fc)))
     (insert "\n\n;; Forms\n\n")  
-    (loop for form in (form-cycle-context-forms context)
+    (loop for form in (form-cycle-fc-forms fc)
           do
           (insert (prin1-to-string form)) 
           (newline)
@@ -710,53 +737,53 @@
 (defun form-cycle-move-to-front ()
   (interactive)
   (let* ((context (form-cycle-gather-context t))
-         (pattern (read-from-minibuffer "Context: "
+         (pattern (read-from-minibuffer "Pattern: "
                                         (with-output-to-string
                                           (prin1 context))
                                         nil 
                                         t))
-         (exist (form-cycle-find-context pattern)))
+         (exist (form-cycle-find-fc pattern)))
     (if exist
-        (form-cycle-delete-context pattern)
-      (error "No such pattern."))
-    (form-cycle-add-context 
-     (form-cycle-context-pattern exist)
-     (form-cycle-context-forms exist) 
-     (form-cycle-context-pattern-options exist))
+        (form-cycle-delete-fc pattern)
+      (error "No such form cycle."))
+    (form-cycle-add-fc 
+     (form-cycle-fc-pattern exist)
+     (form-cycle-fc-forms exist) 
+     (form-cycle-fc-pattern-options exist))
     (message "Moved to front.")))
 
-(defun form-cycle-find-context (pattern)
+(defun form-cycle-find-fc (pattern)
   (unless (listp pattern)
     (setf pattern (list pattern)))
   (cl-find pattern 
            form-cycle-lisp-patterns
-           :key #'form-cycle-context-pattern
+           :key #'form-cycle-fc-pattern
            :test #'equal))
 
-(defun form-cycle-context-position (pattern)
+(defun form-cycle-fc-position (pattern)
   (unless (listp pattern)
     (setf pattern (list pattern)))
   (cl-position pattern form-cycle-lisp-patterns
-               :key #'form-cycle-context-pattern
+               :key #'form-cycle-fc-pattern
                :test #'equal))
 
-(defun form-cycle-find-context-semi-interactively (pattern)
-  (message "%s" (prin1-to-string (form-cycle-find-context pattern))))
+(defun form-cycle-find-fc-semi-interactively (pattern)
+  (message "%s" (prin1-to-string (form-cycle-find-fc pattern))))
 
-(defun form-cycle-delete-context (pattern)
+(defun form-cycle-delete-fc (pattern)
   (unless (listp pattern)
     (setf pattern (list pattern)))
-  (if (form-cycle-find-context pattern)
+  (if (form-cycle-find-fc pattern)
       (progn
         (setf form-cycle-lisp-patterns
               (cl-delete pattern form-cycle-lisp-patterns
-                         :key #'form-cycle-context-pattern
+                         :key #'form-cycle-fc-pattern
                          :test #'equal))
         t)
     nil))
 
-(defun form-cycle-delete-context-semi-interactively (pattern)
-  (if (form-cycle-delete-context pattern)
+(defun form-cycle-delete-fc-semi-interactively (pattern)
+  (if (form-cycle-delete-fc pattern)
       (progn (message "Deleted.")
              t)
     (progn (message "Error deleting.")
@@ -770,17 +797,17 @@
                                           (prin1 context))
                                         nil 
                                         t)))
-    (form-cycle-delete-context-semi-interactively pattern)))
+    (form-cycle-delete-fc-semi-interactively pattern)))
 
-(defun form-cycle-replace-context (pattern forms &optional options)
-  (let ((pos (form-cycle-context-position pattern)))
+(defun form-cycle-replace-fc (pattern forms &optional options)
+  (let ((pos (form-cycle-fc-position pattern)))
     (if pos
         (setf (nth pos form-cycle-lisp-patterns)
-              (form-cycle-make-context pattern forms options))
+              (form-cycle-make-fc pattern forms options))
       nil)))
 
-(defun form-cycle-replace-context-semi-interactively (pattern forms &optional options)
-  (if (form-cycle-replace-context pattern forms options)
+(defun form-cycle-replace-fc-semi-interactively (pattern forms &optional options)
+  (if (form-cycle-replace-fc pattern forms options)
       (message "Replaced.")
     (error "Error replacing.")))
 
@@ -790,9 +817,9 @@
                (read-file-name "Save to: " 
                                nil nil nil "form-cycle-patterns.el"))))
     (with-temp-buffer
-      (dolist (context (reverse form-cycle-lisp-patterns))
+      (dolist (fc (reverse form-cycle-lisp-patterns))
         (newline)
-        (form-cycle-with-context (pat opt forms) context
+        (form-cycle-with-fc (pat opt forms) fc
           (insert
            (pp-to-string
             `(form-cycle-define-pattern ,pat ,opt ,@forms)))))
