@@ -107,7 +107,9 @@
 ;;   pattern matched. 
 ;; 
 ;;   In function names, the abbreviation "fc" is used to indicate a
-;;   form cycle data structure, (e.g. form-cycle-make-fc).
+;;   form cycle data structure, (e.g. form-cycle-make-fc). A
+;;   collection of form cycles may also simply be referred to as
+;;   "patterns" (e.g. form-cycle-lisp-patterns).
 
 (defvar form-cycle-current-name nil)
 (defvar form-cycle-name-marker "_")
