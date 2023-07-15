@@ -310,13 +310,21 @@
                      (setf top nil))
       top)))  
 
-(defun form-cycle-gather-context ()
-  (save-excursion
-    (nreverse
-     (loop until (form-cycle-at-toplevel-p)
-           for car = (form-cycle-surrounding-sexp-car)
-           collect car
-           do (up-list -1)))))
+(defun form-cycle-gather-context (&optional include-symbol-at-point)
+  (let* ((current-symbol (symbol-at-point))
+         (current-symbol-name (when current-symbol
+                                (substring-no-properties
+                                 (symbol-name current-symbol))))
+         (context
+          (save-excursion
+            (loop until (form-cycle-at-toplevel-p)
+                  for car = (form-cycle-surrounding-sexp-car)
+                  collect car
+                  do (up-list -1)))))
+    (if (and include-symbol-at-point
+             current-symbol-name)
+        (nreverse (cons current-symbol-name context))
+      (nreverse context))))
 
 (defun form-cycle-match-context-pattern (pattern current-context 
                                                  &optional 
