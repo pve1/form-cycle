@@ -334,7 +334,7 @@
   (block done
     (when (and max-depth (< max-depth (length current-context)))
       (return-from done nil))
-
+    
     (let ((last (car (last pattern))))
       (when (stringp last) ; Match against current symbol.
         (if (equal last current-symbol-name)
