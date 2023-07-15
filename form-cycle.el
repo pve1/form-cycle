@@ -165,18 +165,18 @@
       (setf form-cycle-initial-position (point))))
 
   (let* ((place-point)
-         (form-string-designator (form-cycle-context-form-string form))
+         (form-string-designator (form-cycle-fc-form-string form))
          (form-string (if (or (functionp form-string-designator)
                               (symbolp form-string-designator))
                           (funcall form-string-designator)
                         form-string-designator))
          (getopt (lambda (opt)
-                   (second (form-cycle-context-form-assoc form opt))))
+                   (second (form-cycle-fc-form-assoc form opt))))
          (getargs (lambda (opt)
-                    (nthcdr 2 (form-cycle-context-form-assoc form opt))))
+                    (nthcdr 2 (form-cycle-fc-form-assoc form opt))))
          (string))
 
-    (when (form-cycle-context-form-assoc form 'map-form)
+    (when (form-cycle-fc-form-assoc form 'map-form)
       (save-excursion
         (setf form-string
               ;; (funcall (funcall getopt 'map-form) form-string)
@@ -384,7 +384,7 @@
           return t
           finally return nil))) ; if complete pattern was not matched 
 
-(defun form-cycle-determine-matching-contexts (known-contexts)
+(defun form-cycle-determine-matching-fcs (known-fcs)
   (save-excursion
     (block done 
       (let* ((current-context (form-cycle-gather-context))
@@ -392,87 +392,87 @@
              (current-symbol-name 
               (when current-symbol
                 (symbol-name current-symbol)))) 
-        (loop for c in known-contexts
-              for pat = (form-cycle-context-pattern c)
-              for range = (form-cycle-context-match-range c)
-              for max-depth = (form-cycle-context-max-depth c)              
+        (loop for c in known-fcs
+              for pat = (form-cycle-fc-pattern c)
+              for range = (form-cycle-fc-match-range c)
+              for max-depth = (form-cycle-fc-max-depth c)              
               when (form-cycle-match-context-pattern 
                     pat current-context range max-depth current-symbol-name)
               collect c)))))
 
 (defvar form-cycle-process-includes-list nil)
 
-(defun form-cycle-process-includes (context known-contexts)
+(defun form-cycle-process-includes (fc known-fcs)
   (let ((form-cycle-process-includes-list nil))
-    (%form-cycle-process-includes context known-contexts nil)))
+    (form-cycle-process-includes-2 fc known-fcs nil)))
 
-(defun %form-cycle-process-includes (context known-contexts &optional already-included)
-  (let (complete-context
+(defun form-cycle-process-includes-2 (fc known-fcs &optional already-included)
+  (let (complete-forms
         patterns-included)
-    (loop for form in (form-cycle-context-forms context)
+    (loop for form in (form-cycle-fc-forms fc)
           if (and (consp form) ; (include foo)
                   (eq (first form) 'include))
           do (let ((pat (rest form)))
                (unless (or (cl-find pat already-included :test #'equal)
                            (cl-find pat patterns-included :test #'equal))                 
-                 (loop for form2 in (form-cycle-context-forms
-                                     (form-cycle-find-context pat))
-                       do (push form2 complete-context))
+                 (loop for form2 in (form-cycle-fc-forms
+                                     (form-cycle-find-fc pat))
+                       do (push form2 complete-forms))
                  (push pat patterns-included)))
-          else do (push form complete-context))
+          else do (push form complete-forms))
 
     ;; Recurse if an include directive was found.
     (if patterns-included
         (form-cycle-process-includes
-         (form-cycle-make-context 
-          (form-cycle-context-pattern context)
-          (nreverse complete-context)
-          (form-cycle-context-pattern-options context))
-         known-contexts
+         (form-cycle-make-fc 
+          (form-cycle-fc-pattern fc)
+          (nreverse complete-forms)
+          (form-cycle-fc-pattern-options fc))
+         known-fcs
          (append patterns-included already-included))
-      (form-cycle-make-context 
-       (form-cycle-context-pattern context)
-       (nreverse complete-context)
-       (form-cycle-context-pattern-options context)))))
+      (form-cycle-make-fc 
+       (form-cycle-fc-pattern fc)
+       (nreverse complete-forms)
+       (form-cycle-fc-pattern-options fc)))))
 
 (defun form-cycle-lisp-patterns (&optional lisp-forms initiate-fn)
   (interactive)
   (when (null lisp-forms)
     (setf lisp-forms form-cycle-lisp-patterns))
   (let* ((form-cycle-function 'form-cycle-with-name)
-         (matching-contexts (form-cycle-determine-matching-contexts 
+         (matching-fcs (form-cycle-determine-matching-fcs 
                              lisp-forms))
-         (context (form-cycle-process-includes
-                   (first matching-contexts)
+         (fc (form-cycle-process-includes
+                   (first matching-fcs)
                    lisp-forms))
          (form-cycle-up-list-initially-p)
          (form-cycle-up-list-initially-sexp-string)
          (form-cycle-raise-list-initially-p))
 
-    (when (< 1 (length matching-contexts))
+    (when (< 1 (length matching-fcs))
       (message "Matching patterns: %s"
-               (mapcar #'form-cycle-context-pattern 
-                       matching-contexts)))
+               (mapcar #'form-cycle-fc-pattern 
+                       matching-fcs)))
 
     (form-cycle-debug (mapcar 
-                       (lambda (x) (form-cycle-context-pattern x))
-                       matching-contexts))
+                       (lambda (x) (form-cycle-fc-pattern x))
+                       matching-fcs))
     (form-cycle-debug (form-cycle-gather-context)) 
 
-    (loop for opt in (form-cycle-context-pattern-options context)
+    (loop for opt in (form-cycle-fc-pattern-options fc)
           do
           (case opt
             (up-list (setf form-cycle-up-list-initially-p t))))
     (if initiate-fn
-        (funcall initiate-fn context)
+        (funcall initiate-fn fc)
       (form-cycle-initiate
-       (form-cycle-context-forms context)))))
+       (form-cycle-fc-forms fc)))))
 
 (defun form-cycle-lisp-patterns-ido (&optional lisp-forms)
   (interactive)    
   (form-cycle-lisp-patterns 
    lisp-forms
-   (lambda (context)
+   (lambda (fc)
      (let* ((mangled-original-pairs)
             (choice (ido-completing-read
                      "" 
@@ -482,14 +482,14 @@
                                        mangled (replace-regexp-in-string "  +" " " mangled))
                                  (push (cons mangled string) mangled-original-pairs)
                                  mangled))
-                             (mapcar 'form-cycle-context-form-string
-                                     (form-cycle-context-forms context)))))
+                             (mapcar 'form-cycle-fc-form-string
+                                     (form-cycle-fc-forms fc)))))
             (form (cl-find (cdr (cl-find choice mangled-original-pairs 
                                          :test #'equal
                                          :key #'car))
-                           (form-cycle-context-forms context)
+                           (form-cycle-fc-forms fc)
                            :test #'equal
-                           :key #'form-cycle-context-form-string)))
+                           :key #'form-cycle-fc-form-string)))
        (form-cycle-initiate (list form))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
