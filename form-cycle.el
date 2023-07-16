@@ -111,6 +111,9 @@
 ;;   collection of form cycles may also simply be referred to as
 ;;   "patterns" (e.g. form-cycle-lisp-patterns).
 
+;; TODO: Refactor the lisp-specific parts away from
+;; form-cycle-with-name to make it more general.
+
 (defvar form-cycle-current-name nil)
 (defvar form-cycle-name-marker "_")
 (defvar form-cycle-point-marker "@")
