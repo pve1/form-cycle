@@ -30,7 +30,7 @@
    (map-form form-cycle-%%%-to-first-char-of-current-name))
   ("(defmethod print-object ((%%% _) stream)
   (print-unreadable-object (%%% stream :type t)
-    (format stream @)))"
+    (format stream@)))"
    (map-form form-cycle-%%%-to-first-char-of-current-name))
   "(defpackage #:_
   (:use #:cl)
@@ -43,14 +43,23 @@
   "(:default-initargs@)"
   "(:documentation \"@\")")
 
-(form-cycle-define-pattern (defclass nil) ()
-  "(%_ :initarg :_ :initform nil)"
-  "(%_ :initarg :_ :accessor _ :initform nil)"
+(form-cycle-define-pattern (defclass (*)) ()
   ("(%_ :initarg :_
     :accessor _
     :initform nil)" (after-cycle form-cycle-indent-defun))
   ("(%_ :initarg :_
+    :reader _
+    :initform nil)" (after-cycle form-cycle-indent-defun))
+  ("(%_ :initarg :_
     :accessor %%%-_
+    :initform nil)" 
+   (map-form (lambda (string) 
+               (replace-regexp-in-string "%%%" 
+                                         (form-cycle-toplevel-form-name)
+                                         string)))
+   (after-cycle form-cycle-indent-defun))
+  ("(%_ :initarg :_
+    :reader %%%-_
     :initform nil)" 
    (map-form (lambda (string) 
                (replace-regexp-in-string "%%%" 
@@ -156,8 +165,8 @@
   ":for sym :being :each :external-symbol :in _")
 
 (form-cycle-define-pattern (loop for-as-hash) (up-list)
-  ":for key :being :each :hash-key :using (:hash-value val) :in _"
-  ":for val :being :each :hash-value :using (:hash-key key) :in _")
+  ":for _ :being :each :hash-key :using (:hash-value val) :in @"
+  ":for _ :being :each :hash-value :using (:hash-key key) :in @")
 
 (form-cycle-define-pattern (loop for-as-arithmetic) (up-list)
   ":for k :from 0 :by 1"   
