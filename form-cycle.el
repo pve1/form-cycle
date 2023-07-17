@@ -844,3 +844,4 @@
   (setf form-cycle-lisp-patterns nil)
   (message "Cleared patterns."))
   
+(provide 'form-cycle)
