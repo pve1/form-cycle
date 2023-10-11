@@ -79,9 +79,9 @@
                        (form-cycle-next))
                    (form-cycle-next))))
        (when (< skip-count (length form-cycle-current-cycle-state))
-         (incf skip-count)
+         (cl-incf skip-count)
          (go again))))))
-   
+
 (defun form-cycle-test ()
   (interactive)
   (form-cycle-initiate '("abc" "foo" "bar")))
@@ -149,7 +149,8 @@
              (unless (looking-at "\\_<")
                (thing-at-point--beginning-of-sexp))
              (kill-sexp)
-             (setf form-cycle-current-name (symbol-name sym)
+             (setf form-cycle-current-name (substring-no-properties
+                                            (current-kill 0))
                    form-cycle-initial-position (point)))
 
             ((and (not sym)
@@ -176,7 +177,7 @@
                           (funcall form-string-designator)
                         form-string-designator))
          (getopt (lambda (opt)
-                   (second (form-cycle-fc-form-assoc form opt))))
+                   (cl-second (form-cycle-fc-form-assoc form opt))))
          (getargs (lambda (opt)
                     (nthcdr 2 (form-cycle-fc-form-assoc form opt))))
          (string))
@@ -231,8 +232,8 @@
     (when (funcall getopt 'place-point)
       (let ((p (funcall getopt 'place-point)))
         (typecase p
-          (integer (goto-char (+ form-cycle-initial-position p)))
-          (function (funcall p)))))
+                  (integer (goto-char (+ form-cycle-initial-position p)))
+                  (function (funcall p)))))
     (when (funcall getopt 'after-cycle)
       (let ((end (save-excursion
                    (let ((len (length string)))
@@ -281,8 +282,8 @@
   (let ((count 0))
     (save-excursion 
       (ignore-errors
-        (loop (backward-sexp) 
-              (incf count))))
+        (cl-loop (backward-sexp)
+                 (incf count))))
     (unless (funcall fn count n)
       (form-cycle-skip))
     form))
@@ -343,10 +344,10 @@
                                  (symbol-name current-symbol))))
          (context
           (save-excursion
-            (loop until (form-cycle-at-toplevel-p)
-                  for car = (form-cycle-surrounding-sexp-car)
-                  collect car
-                  do (up-list -1)))))
+            (cl-loop until (form-cycle-at-toplevel-p)
+                     for car = (form-cycle-surrounding-sexp-car)
+                     collect car
+                     do (up-list -1)))))
     (if (and include-symbol-at-point
              current-symbol-name)
         (nreverse (cons current-symbol-name context))
@@ -357,53 +358,53 @@
                                                  allowed-range 
                                                  max-depth
                                                  current-symbol-name)
-  (block done
+  (cl-block done
     (when (and max-depth (< max-depth (length current-context)))
-      (return-from done nil))
-    
+      (cl-return-from done nil))
+
     (let ((last (car (last pattern))))
-      (when (stringp last) ; Match against current symbol.
+      (when (stringp last)             ; Match against current symbol.
         (if (equal last current-symbol-name)
             (setf pattern (butlast pattern)) ; ok 
-          (return-from done nil))))
+          (cl-return-from done nil))))
 
     (when (and (null pattern)
                (null current-context))
-      (return-from done t))
+      (cl-return-from done t))
 
     (unless (listp pattern)
       (error "Bad pattern."))
 
     (form-cycle-debug allowed-range)
 
-    (loop with pattern-rest = (reverse pattern)
-          for range from 0
-          for pattern-head = (car pattern-rest)
-          for part in (reverse current-context)
-          when (and (or (eq part pattern-head)
-                        (equal '(*) pattern-head))
-                    (or (null allowed-range)
-                        (<= range allowed-range)))
-          do (setf pattern-rest (rest pattern-rest))
-          when (null pattern-rest)
-          return t
-          finally return nil))) ; if complete pattern was not matched 
+    (cl-loop with pattern-rest = (reverse pattern)
+             for range from 0
+             for pattern-head = (car pattern-rest)
+             for part in (reverse current-context)
+             when (and (or (eq part pattern-head)
+                           (equal '(*) pattern-head))
+                       (or (null allowed-range)
+                           (<= range allowed-range)))
+             do (setf pattern-rest (cl-rest pattern-rest))
+             when (null pattern-rest)
+             return t
+             finally return nil))) ; if complete pattern was not matched
 
 (defun form-cycle-determine-matching-fcs (known-fcs)
   (save-excursion
-    (block done 
+    (cl-block done
       (let* ((current-context (form-cycle-gather-context))
              (current-symbol (symbol-at-point))
              (current-symbol-name 
               (when current-symbol
                 (symbol-name current-symbol)))) 
-        (loop for c in known-fcs
-              for pat = (form-cycle-fc-pattern c)
-              for range = (form-cycle-fc-match-range c)
-              for max-depth = (form-cycle-fc-max-depth c)              
-              when (form-cycle-match-context-pattern 
-                    pat current-context range max-depth current-symbol-name)
-              collect c)))))
+        (cl-loop for c in known-fcs
+                 for pat = (form-cycle-fc-pattern c)
+                 for range = (form-cycle-fc-match-range c)
+                 for max-depth = (form-cycle-fc-max-depth c)
+                 when (form-cycle-match-context-pattern
+                       pat current-context range max-depth current-symbol-name)
+                 collect c)))))
 
 (defvar form-cycle-process-includes-list 'nothing)
 
@@ -414,18 +415,18 @@
 (defun form-cycle-process-includes-2 (fc known-fcs)
   (let (complete-forms
         patterns-included-p)
-    (loop for form in (form-cycle-fc-forms fc)
-          if (and (consp form) ; (include foo)
-                  (eq (first form) 'include))
-          do (let ((pat (rest form)))
-               (unless (cl-find pat form-cycle-process-includes-list
-                                :test #'equal)
-                 (loop for form2 in (form-cycle-fc-forms
-                                     (form-cycle-find-fc pat))
-                       do (push form2 complete-forms))
-                 (push pat form-cycle-process-includes-list)
-                 (setf patterns-included-p t)))
-          else do (push form complete-forms))
+    (cl-loop for form in (form-cycle-fc-forms fc)
+             if (and (consp form) ; (include foo)
+                     (eq (cl-first form) 'include))
+             do (let ((pat (cl-rest form)))
+                  (unless (cl-find pat form-cycle-process-includes-list
+                                   :test #'equal)
+                    (cl-loop for form2 in (form-cycle-fc-forms
+                                           (form-cycle-find-fc pat))
+                             do (push form2 complete-forms))
+                    (push pat form-cycle-process-includes-list)
+                    (setf patterns-included-p t)))
+             else do (push form complete-forms))
 
     (setf complete-forms (nreverse complete-forms))
 
@@ -448,10 +449,10 @@
     (setf lisp-forms form-cycle-lisp-patterns))
   (let* ((form-cycle-function 'form-cycle-with-name)
          (matching-fcs (form-cycle-determine-matching-fcs 
-                             lisp-forms))
+                        lisp-forms))
          (fc (form-cycle-process-includes
-                   (first matching-fcs)
-                   lisp-forms))
+              (cl-first matching-fcs)
+              lisp-forms))
          (form-cycle-up-list-initially-p)
          (form-cycle-up-list-initially-sexp-string)
          (form-cycle-raise-list-initially-p))
@@ -466,10 +467,10 @@
                        matching-fcs))
     (form-cycle-debug (form-cycle-gather-context)) 
 
-    (loop for opt in (form-cycle-fc-pattern-options fc)
-          do
-          (case opt
-            (up-list (setf form-cycle-up-list-initially-p t))))
+    (cl-loop for opt in (form-cycle-fc-pattern-options fc)
+             do
+             (cl-case opt
+               (up-list (setf form-cycle-up-list-initially-p t))))
     (if initiate-fn
         (funcall initiate-fn fc)
       (form-cycle-initiate
@@ -502,39 +503,39 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun form-cycle-check-plist (thing)
-  (check-type thing list)
-  (loop for (a b) on thing by #'cddr
-        do (check-type a symbol)))
+  (cl-check-type thing list)
+  (cl-loop for (a b) on thing by #'cddr
+           do (cl-check-type a symbol)))
 
 (defun form-cycle-check-alist (thing)
-  (check-type thing list)
-  (loop for i in thing 
-        do (unless (symbolp i)
-             (check-type i cons))))
+  (cl-check-type thing list)
+  (cl-loop for i in thing
+           do (unless (symbolp i)
+                (cl-check-type i cons))))
 
 (defun form-cycle-check-option (thing)
   (if (consp thing)
-      (check-type (car thing) symbol)
-    (check-type thing symbol)))
+      (cl-check-type (car thing) symbol)
+    (cl-check-type thing symbol)))
 
 ;; Accessors
 
 (defun form-cycle-make-fc (pattern forms &optional options)
-  (check-type pattern (or symbol list string))  
+  (cl-check-type pattern (or symbol list string))
   (unless (listp pattern)
     (setf pattern (list pattern)))
-  (check-type forms list)
+  (cl-check-type forms list)
   (dolist (opt options)
     (form-cycle-check-option opt))
   (dolist (f forms)
     (if (listp f)
         (unless (eq (car f) 'include)
-          (check-type (car f) string)
-          (form-cycle-check-alist (rest f)))
-      (check-type f string)))
-  (list (list* 'pattern pattern)
-        (list* 'options options)
-        (list* 'forms forms)))
+          (cl-check-type (car f) string)
+          (form-cycle-check-alist (cl-rest f)))
+      (cl-check-type f string)))
+  (list (cl-list* 'pattern pattern)
+        (cl-list* 'options options)
+        (cl-list* 'forms forms)))
 
 (defun form-cycle-fc-pattern (fc)
   (cdr (assq 'pattern fc)))
@@ -544,12 +545,12 @@
 
 ;; Like assoc but a symbol is considered equal to (foo t)
 (defun form-cycle-fc-assoc (fc-alist key)
-  (loop for i in fc-alist
-        do (cond ((and (consp i)
-                       (equal (car i) key))
-                  (return i))
-                 ((equal key i)
-                  (return (list i t))))))
+  (cl-loop for i in fc-alist
+           do (cond ((and (consp i)
+                          (equal (car i) key))
+                     (cl-return i))
+                    ((equal key i)
+                     (cl-return (list i t))))))
 
 (defun form-cycle-fc-pattern-assoc (fc key)
   (form-cycle-fc-assoc
@@ -562,7 +563,7 @@
 (defun form-cycle-fc-match-range (fc)
   (let ((r (form-cycle-fc-pattern-assoc fc 'range)))
     (if r 
-        (second r)
+        (cl-second r)
       (if (form-cycle-fc-pattern-assoc fc 'immediate)
           0
         nil))))  
@@ -570,19 +571,19 @@
 (defun form-cycle-fc-max-depth (fc)
   (let ((r (form-cycle-fc-pattern-assoc fc 'max-depth)))
     (if r 
-        (second r)
+        (cl-second r)
       (if (form-cycle-fc-pattern-assoc fc 'toplevel)
           0
         nil)))) 
-  
+
 (defun form-cycle-fc-form-options (form)
   (if (listp form)
-      (rest form)
+      (cl-rest form)
     nil))
 
 (defun form-cycle-fc-form-string (form)
   (if (listp form)
-      (first form)
+      (cl-first form)
     form))
 
 (defun form-cycle-fc-form-assoc (form key)
@@ -592,10 +593,10 @@
 
 (defun form-cycle-read-fc-from-buffer ()
   (let (forms)
-    (loop for form = (condition-case nil
-                         (read (current-buffer))
-                       (end-of-file (return)))
-          do (push form forms))
+    (cl-loop for form = (condition-case nil
+                            (read (current-buffer))
+                          (end-of-file (cl-return)))
+             do (push form forms))
     (setf forms (nreverse forms))
     (form-cycle-make-fc 
      (nth 0 forms)
@@ -605,20 +606,20 @@
 (defmacro form-cycle-with-fc (bindings fc &rest rest)
   "(form-cycle-with-fc (pattern options forms) FC &rest REST)"
   (destructuring-bind (pattern options forms) bindings
-    (let ((c (cl-gensym)))
-      `(let* ((,c ,fc)
-              (,pattern (form-cycle-fc-pattern ,c))
-              (,options (form-cycle-fc-pattern-options ,c))
-              (,forms (form-cycle-fc-forms ,c)))
-         ,@rest))))
+                      (let ((c (cl-gensym)))
+                        `(let* ((,c ,fc)
+                                (,pattern (form-cycle-fc-pattern ,c))
+                                (,options (form-cycle-fc-pattern-options ,c))
+                                (,forms (form-cycle-fc-forms ,c)))
+                           ,@rest))))
 
 (defmacro form-cycle-with-form (bindings form &rest rest)
   (destructuring-bind (string options) bindings
-    (let ((f (cl-gensym)))
-      `(let* ((,f ,form)
-              (,string (form-cycle-fc-form-string ,f))
-              (,options (form-cycle-fc-form-options ,f)))
-         ,@rest))))
+                      (let ((f (cl-gensym)))
+                        `(let* ((,f ,form)
+                                (,string (form-cycle-fc-form-string ,f))
+                                (,options (form-cycle-fc-form-options ,f)))
+                           ,@rest))))
 
 (put 'form-cycle-with-fc 'lisp-indent-function 2)
 (put 'form-cycle-with-form 'lisp-indent-function 2)
@@ -636,10 +637,10 @@
     (setf pattern (list pattern)))
   (if (form-cycle-find-fc pattern)
       (form-cycle-replace-fc pattern forms options)
-    (pushnew (form-cycle-make-fc pattern forms options)
-             form-cycle-lisp-patterns
-             :test #'equal
-             :key #'form-cycle-fc-pattern)))
+    (cl-pushnew (form-cycle-make-fc pattern forms options)
+                form-cycle-lisp-patterns
+                :test #'equal
+                :key #'form-cycle-fc-pattern)))
 
 (defun form-cycle-add-fc-semi-interactively (pattern forms &optional options)
   (if (form-cycle-add-fc pattern forms options)
@@ -735,11 +736,11 @@
     (insert (prin1-to-string 
              (form-cycle-fc-pattern-options fc)))
     (insert "\n\n;; Forms\n\n")  
-    (loop for form in (form-cycle-fc-forms fc)
-          do
-          (insert (prin1-to-string form)) 
-          (newline)
-          (newline))))
+    (cl-loop for form in (form-cycle-fc-forms fc)
+             do
+             (insert (prin1-to-string form))
+             (newline)
+             (newline))))
 
 (defun form-cycle-move-to-front ()
   (interactive)
@@ -827,9 +828,9 @@
       (dolist (fc (reverse form-cycle-lisp-patterns))
         (newline)
         (form-cycle-with-fc (pat opt forms) fc
-          (insert
-           (pp-to-string
-            `(form-cycle-define-pattern ,pat ,opt ,@forms)))))
+                            (insert
+                             (pp-to-string
+                              `(form-cycle-define-pattern ,pat ,opt ,@forms)))))
       (write-file file nil))))
 
 (defun form-cycle-load ()
@@ -843,5 +844,5 @@
   (interactive)
   (setf form-cycle-lisp-patterns nil)
   (message "Cleared patterns."))
-  
+
 (provide 'form-cycle)
