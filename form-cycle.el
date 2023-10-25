@@ -605,21 +605,21 @@
 
 (defmacro form-cycle-with-fc (bindings fc &rest rest)
   "(form-cycle-with-fc (pattern options forms) FC &rest REST)"
-  (destructuring-bind (pattern options forms) bindings
-                      (let ((c (cl-gensym)))
-                        `(let* ((,c ,fc)
-                                (,pattern (form-cycle-fc-pattern ,c))
-                                (,options (form-cycle-fc-pattern-options ,c))
-                                (,forms (form-cycle-fc-forms ,c)))
-                           ,@rest))))
+  (cl-destructuring-bind (pattern options forms) bindings
+    (let ((c (cl-gensym)))
+      `(let* ((,c ,fc)
+              (,pattern (form-cycle-fc-pattern ,c))
+              (,options (form-cycle-fc-pattern-options ,c))
+              (,forms (form-cycle-fc-forms ,c)))
+         ,@rest))))
 
 (defmacro form-cycle-with-form (bindings form &rest rest)
-  (destructuring-bind (string options) bindings
-                      (let ((f (cl-gensym)))
-                        `(let* ((,f ,form)
-                                (,string (form-cycle-fc-form-string ,f))
-                                (,options (form-cycle-fc-form-options ,f)))
-                           ,@rest))))
+  (cl-destructuring-bind (string options) bindings
+    (let ((f (cl-gensym)))
+      `(let* ((,f ,form)
+              (,string (form-cycle-fc-form-string ,f))
+              (,options (form-cycle-fc-form-options ,f)))
+         ,@rest))))
 
 (put 'form-cycle-with-fc 'lisp-indent-function 2)
 (put 'form-cycle-with-form 'lisp-indent-function 2)
